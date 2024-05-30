@@ -4,7 +4,7 @@ pragma solidity 0.8.23;
 
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract JPOW is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
