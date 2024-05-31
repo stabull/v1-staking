@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.23;
-
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./interfaces/IStrategy.sol";
 
 contract JPOW is Ownable, ReentrancyGuard {
-    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     // Info of each user.
@@ -39,7 +39,7 @@ contract JPOW is Ownable, ReentrancyGuard {
     address public WSB = 0x22168882276e5D5e1da694343b41DD7726eeb288;
     address public fundSource; //source of WSB tokens to pull from
 
-    address public burnAddress = 0x000000000000000000000000000000000000dEaD;
+    // address public burnAddress = 0x000000000000000000000000000000000000dEaD;
 
     //initialize at zero and update later
     uint256 public WSBPerBlock = 0; // WSB tokens distributed per block
@@ -55,6 +55,10 @@ contract JPOW is Ownable, ReentrancyGuard {
         uint256 indexed pid,
         uint256 amount
     );
+
+    constructor(address _initialOwner) Ownable() {
+    }
+
 
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
@@ -73,7 +77,7 @@ contract JPOW is Ownable, ReentrancyGuard {
             massUpdatePools();
         }
         uint256 lastRewardBlock = block.number;
-        totalAllocPoint = totalAllocPoint.add(_allocPoint);
+        totalAllocPoint = totalAllocPoint + (_allocPoint);
         poolInfo.push(
             PoolInfo({
                 want: _want,
@@ -94,7 +98,7 @@ contract JPOW is Ownable, ReentrancyGuard {
         if (_withUpdate) {
             massUpdatePools();
         }
-        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(
+        totalAllocPoint = totalAllocPoint -  (poolInfo[_pid].allocPoint) + (
             _allocPoint
         );
         poolInfo[_pid].allocPoint = _allocPoint;
@@ -106,7 +110,7 @@ contract JPOW is Ownable, ReentrancyGuard {
         pure
         returns (uint256)
     {
-        return _to.sub(_from);
+        return _to -  (_from);
     }
 
     // View function to see pending WSB on frontend.
@@ -123,14 +127,14 @@ contract JPOW is Ownable, ReentrancyGuard {
             uint256 multiplier =
                 getMultiplier(pool.lastRewardBlock, block.number);
             uint256 WSBReward =
-                multiplier.mul(WSBPerBlock).mul(pool.allocPoint).div(
+                multiplier * (WSBPerBlock) * (pool.allocPoint) / (
                     totalAllocPoint
                 );
-            accWSBPerShare = accWSBPerShare.add(
-                WSBReward.mul(1e12).div(sharesTotal)
+            accWSBPerShare = accWSBPerShare + (
+                WSBReward * (1e12) / (sharesTotal)
             );
         }
-        return user.shares.mul(accWSBPerShare).div(1e12).sub(user.rewardDebt);
+        return user.shares * (accWSBPerShare) / (1e12) -  (user.rewardDebt);
     }
 
     // View function to see staked Want tokens on frontend.
@@ -148,7 +152,7 @@ contract JPOW is Ownable, ReentrancyGuard {
         if (sharesTotal == 0) {
             return 0;
         }
-        return user.shares.mul(wantLockedTotal).div(sharesTotal);
+        return user.shares * (wantLockedTotal) / (sharesTotal);
     }
 
     // Update reward variables for all pools. Be careful of gas spending!
@@ -175,14 +179,14 @@ contract JPOW is Ownable, ReentrancyGuard {
             return;
         }
         uint256 WSBReward =
-            multiplier.mul(WSBPerBlock).mul(pool.allocPoint).div(
+            multiplier * (WSBPerBlock) * (pool.allocPoint) / (
                 totalAllocPoint
             );
 
         getWSB(WSBReward);
 
-        pool.accWSBPerShare = pool.accWSBPerShare.add(
-            WSBReward.mul(1e12).div(sharesTotal)
+        pool.accWSBPerShare = pool.accWSBPerShare + (
+            WSBReward * (1e12) / (sharesTotal)
         );
         pool.lastRewardBlock = block.number;
     }
@@ -195,7 +199,7 @@ contract JPOW is Ownable, ReentrancyGuard {
 
         if (user.shares > 0) {
             uint256 pending =
-                user.shares.mul(pool.accWSBPerShare).div(1e12).sub(
+                user.shares * (pool.accWSBPerShare) / (1e12) -  (
                     user.rewardDebt
                 );
             if (pending > 0) {
@@ -212,9 +216,9 @@ contract JPOW is Ownable, ReentrancyGuard {
             pool.want.safeIncreaseAllowance(pool.strat, _wantAmt);
             uint256 sharesAdded =
                 IStrategy(poolInfo[_pid].strat).deposit(msg.sender, _wantAmt);
-            user.shares = user.shares.add(sharesAdded);
+            user.shares = user.shares + (sharesAdded);
         }
-        user.rewardDebt = user.shares.mul(pool.accWSBPerShare).div(1e12);
+        user.rewardDebt = user.shares * (pool.accWSBPerShare) / (1e12);
         emit Deposit(msg.sender, _pid, _wantAmt);
     }
 
@@ -234,7 +238,7 @@ contract JPOW is Ownable, ReentrancyGuard {
 
         // Withdraw pending WSB
         uint256 pending =
-            user.shares.mul(pool.accWSBPerShare).div(1e12).sub(
+            user.shares * (pool.accWSBPerShare) / (1e12) -  (
                 user.rewardDebt
             );
         if (pending > 0) {
@@ -242,7 +246,7 @@ contract JPOW is Ownable, ReentrancyGuard {
         }
 
         // Withdraw want tokens
-        uint256 amount = user.shares.mul(wantLockedTotal).div(sharesTotal);
+        uint256 amount = user.shares * (wantLockedTotal) / (sharesTotal);
         if (_wantAmt > amount) {
             _wantAmt = amount;
         }
@@ -253,7 +257,7 @@ contract JPOW is Ownable, ReentrancyGuard {
             if (sharesRemoved > user.shares) {
                 user.shares = 0;
             } else {
-                user.shares = user.shares.sub(sharesRemoved);
+                user.shares = user.shares -  (sharesRemoved);
             }
 
             uint256 wantBal = IERC20(pool.want).balanceOf(address(this));
@@ -267,12 +271,12 @@ contract JPOW is Ownable, ReentrancyGuard {
             }
             
         }
-        user.rewardDebt = user.shares.mul(pool.accWSBPerShare).div(1e12);
+        user.rewardDebt = user.shares * (pool.accWSBPerShare) / (1e12);
         emit Withdraw(msg.sender, _pid, _wantAmt);
     }
 
     function withdrawAll(uint256 _pid) public nonReentrant {
-        withdraw(_pid, uint256(-1));
+        withdraw(_pid, type(uint256).max);
     }
 
     // Withdraw without caring about rewards. EMERGENCY ONLY.
@@ -283,7 +287,7 @@ contract JPOW is Ownable, ReentrancyGuard {
         uint256 wantLockedTotal =
             IStrategy(poolInfo[_pid].strat).wantLockedTotal();
         uint256 sharesTotal = IStrategy(poolInfo[_pid].strat).sharesTotal();
-        uint256 amount = user.shares.mul(wantLockedTotal).div(sharesTotal);
+        uint256 amount = user.shares * (wantLockedTotal) / (sharesTotal);
 
         IStrategy(poolInfo[_pid].strat).withdraw(msg.sender, amount);
 
@@ -326,16 +330,3 @@ contract JPOW is Ownable, ReentrancyGuard {
 
 }
 
-contract DarkPool is Ownable {
-
-    address public WSB = 0x22168882276e5D5e1da694343b41DD7726eeb288;
-
-    constructor(address _JPOW) public {
-        IERC20(WSB).approve(_JPOW, uint256(-1));
-    }
-
-    function transferERC20(address _token, address _receiver, uint256 _amount) external onlyOwner {
-        IERC20(_token).transfer(_receiver, _amount);
-    }
-
-}
