@@ -2,9 +2,9 @@
 
 pragma solidity 0.8.20;
 
-interface IStrategy {
+interface IStakingPool {
     // Total want tokens managed by stratfegy
-    function wantLockedTotal() external view returns (uint256);
+    function tokenLockedTotal() external view returns (uint256);
 
     // Sum of all shares of users to wantLockedTotal
     function sharesTotal() external view returns (uint256);
@@ -13,12 +13,12 @@ interface IStrategy {
     function earn() external;
 
     // Transfer want tokens autoFarm -> strategy
-    function deposit(address _userAddress, uint256 _wantAmt)
+    function deposit( address _userAddress,uint256 _wantAmt)
         external
         returns (uint256);
 
     // Transfer want tokens strategy -> autoFarm
-    function withdraw(address _userAddress, uint256 _wantAmt)
+    function withdraw(address _userAddress,uint256 _wantAmt)
         external
         returns (uint256);
 
