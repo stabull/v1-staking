@@ -11,7 +11,7 @@ contract Authorizable is Ownable2Step {
     mapping(address => bool) private authorized;
 
     modifier onlyAuthorized() {
-        if(!authorized[msg.sender] ||  owner() != msg.sender) revert UnAuthorized();
+        if(!authorized[msg.sender] &&  owner() != msg.sender) revert UnAuthorized();
         _;
     }
     

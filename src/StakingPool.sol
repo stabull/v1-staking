@@ -24,8 +24,8 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     error onlyGovernanceAuthorized()
 ;
     address public tokenAddress;
-    address public JPOWAddress;
-    address public WSBAddress;
+    address public stakingFactoryAddress;
+    address public rewardTokenAddress;
     address public govAddress; // timelock contract
     address public feeReceiver;
 
@@ -65,17 +65,17 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     }
 
     constructor(
-        address _JPOWAddress,
-        address _WSBAddress,
+        address _stakingFactoryAddress,
+        address _rewardTokenAddress,
         address _feeReceiver,
         address _tokenAddress
-    ) zeroAddressCheck(_JPOWAddress) zeroAddressCheck(_WSBAddress) zeroAddressCheck(_feeReceiver) zeroAddressCheck(_tokenAddress){
+    ) zeroAddressCheck(_stakingFactoryAddress) zeroAddressCheck(_rewardTokenAddress) zeroAddressCheck(_feeReceiver) zeroAddressCheck(_tokenAddress){
         govAddress = msg.sender;
-        JPOWAddress = _JPOWAddress;
-        WSBAddress = _WSBAddress;
+        stakingFactoryAddress = _stakingFactoryAddress;
+        rewardTokenAddress = _rewardTokenAddress;
         feeReceiver = _feeReceiver;
         tokenAddress = _tokenAddress;
-        transferOwnership(JPOWAddress);
+        transferOwnership(stakingFactoryAddress);
     }
 
 
@@ -112,7 +112,6 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         public
         onlyOwner
         nonReentrant
-        zeroAmountCheck(_tokenAmt)
         zeroAddressCheck(_userAddress)
         returns (uint256)
     {
@@ -136,13 +135,12 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         //user only pays fee if they have a recent last deposit
         if(lastUserDepositTime[_userAddress]+(WITHDRAW_FEE_PERIOD) >= block.timestamp) {
             IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
-            _tokenAmt = _tokenAmt - feeAmount;
+            IERC20(tokenAddress).safeTransfer(stakingFactoryAddress, _tokenAmt - feeAmount);
+        }else{
+         IERC20(tokenAddress).safeTransfer(stakingFactoryAddress, _tokenAmt );
         }
 
-
-        IERC20(tokenAddress).safeTransfer(JPOWAddress, _tokenAmt);
-
-        return sharesRemoved;
+        return _tokenAmt;
     }
 
     function pause() public onlyGovernance {
@@ -156,6 +154,11 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     function setEntranceFeeFactor(uint256 _entranceFeeFactor) public onlyGovernance {
         if (_entranceFeeFactor > entranceFeeFactorMax) revert FeeLimitExceeded();
         entranceFeeFactor = _entranceFeeFactor;
+    }
+
+    function setExitFeeFactor(uint256 _exitFeeFactor) public onlyGovernance {
+        if (_exitFeeFactor > exitFeeFactor) revert FeeLimitExceeded();
+        exitFeeFactor = _exitFeeFactor;
     }
 
     function setGov(address _govAddress) public onlyGovernance zeroAddressCheck(_govAddress){
