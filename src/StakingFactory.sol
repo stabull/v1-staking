@@ -7,6 +7,10 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./Authorizable.sol";
 import "./interfaces/IStakingPool.sol";
 
+
+import {Test, console2} from "forge-std/Test.sol";
+
+
 contract StakingFactory is Authorizable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -18,6 +22,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
     error UserSharesZero();
     error TotalSharesZero();
     error RewardTokenTransfer();
+    error TokenPoolAlreadyAdded();
 
     // Info of each user.
     struct UserInfo {
@@ -45,7 +50,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         address pool; // Staking Pool address that will auto compound pool tokens
     }
 
-    address public rewardToken = 0x22168882276e5D5e1da694343b41DD7726eeb288;
+    address public rewardToken;
     address public fundSource; //source of rewardToken tokens to pull from
 
     // address public burnAddress = 0x000000000000000000000000000000000000dEaD;
@@ -55,6 +60,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
 
     PoolInfo[] public poolInfo; // Info of each pool.
     mapping(uint256 => mapping(address => UserInfo)) public userInfo; // Info of each user that stakes LP tokens.
+    mapping(address => bool) public poolsAdded;
     uint256 public totalAllocPoint = 0; // Total allocation points. Must be the sum of all allocation points in all pools.
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
@@ -93,7 +99,10 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         _;
     }
 
-    constructor(address _initialOwner) Ownable() {}
+    constructor(address _rewardToken, address _fundSource) Ownable() {
+        rewardToken = _rewardToken;
+        fundSource = _fundSource;
+    }
 
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
@@ -112,8 +121,10 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         onlyOwner
         zeroAllocCheck(_allocPoint)
         zeroAddressCheck(address(poolToken))
-        zeroAddressCheck(_pool) onlyAuthorized
+        zeroAddressCheck(_pool)
+        onlyAuthorized
     {
+        if (poolsAdded[address(poolToken)]) revert TokenPoolAlreadyAdded();
         if (_withUpdate) {
             massUpdatePools();
         }
@@ -128,6 +139,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
                 pool: _pool
             })
         );
+        poolsAdded[address(poolToken)] == true;
     }
 
     // Update the given pool's rewardToken allocation point. Can only be called by the owner.
@@ -135,7 +147,13 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         uint256 _pid,
         uint256 _allocPoint,
         bool _withUpdate
-    ) public onlyOwner zeroAllocCheck(_allocPoint) validPID(_pid) onlyAuthorized {
+    )
+        public
+        onlyOwner
+        zeroAllocCheck(_allocPoint)
+        validPID(_pid)
+        onlyAuthorized
+    {
         if (_withUpdate) {
             massUpdatePools();
         }
@@ -302,7 +320,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         }
         if (poolTokenAmt > 0) {
             uint256 sharesRemoved = IStakingPool(poolInfo[_pid].pool).withdraw(
-                 msg.sender,
+                msg.sender,
                 poolTokenAmt
             );
 
@@ -332,11 +350,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         withdraw(_pid, type(uint256).max);
     }
 
-
-    function claimReward(
-        uint256 _pid,
-        uint256 poolTokenAmt
-    ) public nonReentrant validPID(_pid) zeroAmountCheck(poolTokenAmt) {
+    function claimReward(uint256 _pid) public nonReentrant validPID(_pid) {
         updatePool(_pid);
 
         PoolInfo storage pool = poolInfo[_pid];
@@ -354,40 +368,36 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         if (pending > 0) {
             safeRewardTokenTransfer(msg.sender, pending);
         }
-         user.rewardDebt =
+        user.rewardDebt =
             (user.shares * (pool.accRewardTokenPerShare)) /
             (1e12);
     }
 
-        function claimRewardMulitple(
-        uint256[] memory _pids,
-        uint256 poolTokenAmt
-    ) public nonReentrant zeroAmountCheck(poolTokenAmt) {
-        for(uint i= 0;i < _pids.length;i++){
-        uint256 _pid = _pids[i];
-            if (_pid >= poolInfo.length) 
-            revert InvalidPID();
-        updatePool(_pid);
+    function claimRewardMulitple(uint256[] memory _pids) public nonReentrant {
+        for (uint i = 0; i < _pids.length; i++) {
+            uint256 _pid = _pids[i];
+            if (_pid >= poolInfo.length) revert InvalidPID();
+            updatePool(_pid);
 
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
+            PoolInfo storage pool = poolInfo[_pid];
+            UserInfo storage user = userInfo[_pid][msg.sender];
 
-        uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
+            uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool)
+                .sharesTotal();
 
-        if (user.shares == 0) revert UserSharesZero();
-        if (sharesTotal == 0) revert TotalSharesZero();
+            if (user.shares == 0) revert UserSharesZero();
+            if (sharesTotal == 0) revert TotalSharesZero();
 
-        // Withdraw pending rewardToken
-        uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
-            (1e12) -
-            (user.rewardDebt);
-        if (pending > 0) {
-            safeRewardTokenTransfer(msg.sender, pending);
-        }
-         user.rewardDebt =
-            (user.shares * (pool.accRewardTokenPerShare)) /
-            (1e12);
-
+            // Withdraw pending rewardToken
+            uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
+                (1e12) -
+                (user.rewardDebt);
+            if (pending > 0) {
+                safeRewardTokenTransfer(msg.sender, pending);
+            }
+            user.rewardDebt =
+                (user.shares * (pool.accRewardTokenPerShare)) /
+                (1e12);
         }
     }
 
@@ -402,8 +412,12 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             .tokenLockedTotal();
         uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
         uint256 amount = (user.shares * (tokenLockedTotal)) / (sharesTotal);
-
-        IStakingPool(poolInfo[_pid].pool).withdraw( msg.sender,amount);
+        
+        uint256 poolBalance = IERC20(pool.token).balanceOf(address(this));
+    if (amount > poolBalance) {
+        amount = poolBalance;
+    }
+        IStakingPool(poolInfo[_pid].pool).withdraw(msg.sender, amount);
 
         pool.token.safeTransfer(address(msg.sender), amount);
         emit EmergencyWithdraw(msg.sender, _pid, amount);
@@ -434,6 +448,8 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             _rewardTokenAmt
         );
     }
+       
+     
 
     function setFundSource(
         address _fundSource
