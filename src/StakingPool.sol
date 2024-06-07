@@ -156,6 +156,11 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         entranceFeeFactor = _entranceFeeFactor;
     }
 
+    function setExitFeeFactor(uint256 _exitFeeFactor) public onlyGovernance {
+        if (_exitFeeFactor > exitFeeFactor) revert FeeLimitExceeded();
+        exitFeeFactor = _exitFeeFactor;
+    }
+
     function setGov(address _govAddress) public onlyGovernance zeroAddressCheck(_govAddress){
         govAddress = _govAddress;
     }

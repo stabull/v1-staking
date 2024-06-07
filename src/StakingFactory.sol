@@ -7,9 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./Authorizable.sol";
 import "./interfaces/IStakingPool.sol";
 
-
 import {Test, console2} from "forge-std/Test.sol";
-
 
 contract StakingFactory is Authorizable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -346,7 +344,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         emit Withdraw(msg.sender, _pid, poolTokenAmt);
     }
 
-    function withdrawAll(uint256 _pid) public nonReentrant {
+    function withdrawAll(uint256 _pid) public {
         withdraw(_pid, type(uint256).max);
     }
 
@@ -357,7 +355,6 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         UserInfo storage user = userInfo[_pid][msg.sender];
 
         uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
-
         if (user.shares == 0) revert UserSharesZero();
         if (sharesTotal == 0) revert TotalSharesZero();
 
@@ -384,7 +381,6 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
 
             uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool)
                 .sharesTotal();
-
             if (user.shares == 0) revert UserSharesZero();
             if (sharesTotal == 0) revert TotalSharesZero();
 
@@ -412,12 +408,13 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             .tokenLockedTotal();
         uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
         uint256 amount = (user.shares * (tokenLockedTotal)) / (sharesTotal);
-        
-        uint256 poolBalance = IERC20(pool.token).balanceOf(address(this));
-    if (amount > poolBalance) {
-        amount = poolBalance;
-    }
+
         IStakingPool(poolInfo[_pid].pool).withdraw(msg.sender, amount);
+
+        uint256 poolBalance = IERC20(pool.token).balanceOf(address(this));
+        if (amount > poolBalance) {
+            amount = poolBalance;
+        }
 
         pool.token.safeTransfer(address(msg.sender), amount);
         emit EmergencyWithdraw(msg.sender, _pid, amount);
@@ -448,8 +445,6 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             _rewardTokenAmt
         );
     }
-       
-     
 
     function setFundSource(
         address _fundSource
