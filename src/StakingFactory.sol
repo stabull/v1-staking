@@ -97,17 +97,26 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         _;
     }
 
+    /// @notice Initializes the StakingFactory contract with the reward token and fund source addresses.
+    /// @param _rewardToken The address of the reward token.
+    /// @param _fundSource The address from which reward tokens will be pulled for distribution.
     constructor(address _rewardToken, address _fundSource) Ownable() {
         rewardToken = _rewardToken;
         fundSource = _fundSource;
     }
 
+    /// @notice Returns the number of pools managed by the factory.
+    /// @return The length of the `poolInfo` array.
     function poolLength() external view returns (uint256) {
         return poolInfo.length;
     }
 
-    // Add a new lp to the pool. Can only be called by the owner.
-    // XXX DO NOT add the same LP token more than once. Rewards will be messed up if you do. (Only if pool tokens are stored here.)
+    /// @notice Adds a new staking pool to the factory.
+    /// @dev Only callable by the contract owner.
+    /// @param _allocPoint Allocation points assigned to the new pool. This determines the share of rewards the pool receives.
+    /// @param poolToken The address of the LP token that will be staked in the pool.
+    /// @param _withUpdate Boolean indicating whether to update reward variables before adding the pool.
+    /// @param _pool The address of the `StakingPool` contract associated with the new pool.
 
     function add(
         uint256 _allocPoint,
@@ -137,10 +146,14 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
                 pool: _pool
             })
         );
-        poolsAdded[address(poolToken)] == true;
+        poolsAdded[address(poolToken)] = true;
     }
 
-    // Update the given pool's rewardToken allocation point. Can only be called by the owner.
+    /// @notice Updates the allocation points of an existing pool.
+    /// @dev Only callable by the contract owner.
+    /// @param _pid The pool ID (index in the `poolInfo` array).
+    /// @param _allocPoint The new allocation point for the pool.
+    /// @param _withUpdate Boolean indicating whether to update reward variables before updating the allocation points.
     function set(
         uint256 _pid,
         uint256 _allocPoint,
@@ -162,7 +175,10 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         poolInfo[_pid].allocPoint = _allocPoint;
     }
 
-    // Return reward multiplier over the given _from to _to block.
+    /// @notice Calculates the reward multiplier over a given block range.
+    /// @param _from The starting block number.
+    /// @param _to The ending block number.
+    /// @return The calculated reward multiplier.
     function getMultiplier(
         uint256 _from,
         uint256 _to
@@ -170,7 +186,10 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         return _to - (_from);
     }
 
-    // View function to see pending rewardToken on frontend.
+    /// @notice Returns the pending reward tokens for a user in a specific pool.
+    /// @param _pid The pool ID.
+    /// @param _user The address of the user.
+    /// @return The amount of pending reward tokens.
     function pendingRewardToken(
         uint256 _pid,
         address _user
@@ -197,7 +216,10 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             (user.rewardDebt);
     }
 
-    // View function to see staked pool tokens on frontend.
+    /// @notice Returns the amount of staked LP tokens for a user in a specific pool.
+    /// @param _pid The pool ID.
+    /// @param _user The address of the user.
+    /// @return The amount of staked LP tokens.
     function stakedtokenTokens(
         uint256 _pid,
         address _user
@@ -214,7 +236,8 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         return (user.shares * (tokenLockedTotal)) / (sharesTotal);
     }
 
-    // Update reward variables for all pools. Be careful of gas spending!
+    /// @notice Updates reward variables for all pools.
+    /// @dev This function can be expensive in terms of gas, so use it carefully.
     function massUpdatePools() public {
         uint256 length = poolInfo.length;
         for (uint256 pid = 0; pid < length; ++pid) {
@@ -222,7 +245,8 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         }
     }
 
-    // Update reward variables of the given pool to be up-to-date.
+    /// @notice Updates the reward variables of a specific pool.
+    /// @param _pid The pool ID.
     function updatePool(uint256 _pid) public validPID(_pid) {
         PoolInfo storage pool = poolInfo[_pid];
         if (block.number <= pool.lastRewardBlock) {
@@ -242,14 +266,19 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             (pool.allocPoint)) / (totalAllocPoint);
 
         getRewardToken(rewardTokenReward);
-
+        console2.log(
+            "updatePool ~ pool.accRewardTokenPerShare:",
+            pool.accRewardTokenPerShare
+        );
         pool.accRewardTokenPerShare =
             pool.accRewardTokenPerShare +
             ((rewardTokenReward * (1e12)) / (sharesTotal));
         pool.lastRewardBlock = block.number;
     }
 
-    // pool tokens moved from user -> rewardTokenFarm (rewardToken allocation) -> pool (compounding)
+    /// @notice Allows a user to deposit LP tokens into a specific pool for staking.
+    /// @param _pid The pool ID.
+    /// @param poolTokenAmt The amount of LP tokens to deposit.
     function deposit(
         uint256 _pid,
         uint256 poolTokenAmt
@@ -286,7 +315,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         emit Deposit(msg.sender, _pid, poolTokenAmt);
     }
 
-    // Withdraw LP tokens from MasterChef.
+    /// @notice Allows a user to withdraw their staked LP tokens from a specific pool.
+    /// @param _pid The pool ID.
+    /// @param poolTokenAmt The amount of LP tokens to withdraw.
     function withdraw(
         uint256 _pid,
         uint256 poolTokenAmt
@@ -344,10 +375,14 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         emit Withdraw(msg.sender, _pid, poolTokenAmt);
     }
 
+    /// @notice Allows a user to withdraw all their staked LP tokens and accrued rewards from a specific pool.
+    /// @param _pid The pool ID.
     function withdrawAll(uint256 _pid) public {
         withdraw(_pid, type(uint256).max);
     }
 
+    /// @notice Allows a user to claim their accrued rewards from a specific pool without withdrawing LP tokens.
+    /// @param _pid The pool ID.
     function claimReward(uint256 _pid) public nonReentrant validPID(_pid) {
         updatePool(_pid);
 
@@ -370,6 +405,8 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             (1e12);
     }
 
+    /// @notice Allows a user to claim their accrued rewards from multiple pools.
+    /// @param _pids An array of pool IDs.
     function claimRewardMulitple(uint256[] memory _pids) public nonReentrant {
         for (uint i = 0; i < _pids.length; i++) {
             uint256 _pid = _pids[i];
@@ -397,7 +434,8 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         }
     }
 
-    // Withdraw without caring about rewards. EMERGENCY ONLY.
+    /// @notice Allows a user to withdraw their staked LP tokens from a specific pool without claiming rewards.
+    /// @dev This function is for emergency situations and should be used with caution.
     function emergencyWithdraw(
         uint256 _pid
     ) public nonReentrant validPID(_pid) {
@@ -422,7 +460,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         user.rewardDebt = 0;
     }
 
-    // Safe rewardToken transfer function, just in case if rounding error causes pool to not have enough
+    /// @dev Internal function to safely transfer reward tokens to a user.
+    /// @param _to The address of the recipient.
+    /// @param _rewardTokenAmt The amount of reward tokens to transfer.
     function safeRewardTokenTransfer(
         address _to,
         uint256 _rewardTokenAmt
@@ -435,7 +475,8 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         }
     }
 
-    //gets rewardToken for distribution from external address
+    /// @dev Internal function to transfer reward tokens from the `fundSource` to the factory contract.
+    /// @param _rewardTokenAmt The amount of reward tokens to transfer.
     function getRewardToken(
         uint256 _rewardTokenAmt
     ) internal zeroAmountCheck(_rewardTokenAmt) {
@@ -446,12 +487,18 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         );
     }
 
+    /// @notice Sets the address from which reward tokens will be pulled for distribution.
+    /// @dev Only callable by the contract owner.
+    /// @param _fundSource The new fund source address.
     function setFundSource(
         address _fundSource
     ) external onlyOwner zeroAddressCheck(_fundSource) {
         fundSource = _fundSource;
     }
 
+    /// @notice Allows the contract owner to recover tokens (other than the reward token) accidentally sent to the contract.
+    /// @param _token The address of the stuck token.
+    /// @param _amount The amount of tokens to recover.
     function inCaseTokensGetStuck(
         address _token,
         uint256 _amount
@@ -460,6 +507,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         IERC20(_token).safeTransfer(msg.sender, _amount);
     }
 
+    /// @notice Sets the number of reward tokens to be distributed per block.
+    /// @dev Only callable by the contract owner.
+    /// @param _rewardTokenPerBlock The new reward token amount per block.
     function setRewardTokenPerBlock(
         uint256 _rewardTokenPerBlock
     ) external onlyOwner zeroAmountCheck(_rewardTokenPerBlock) {

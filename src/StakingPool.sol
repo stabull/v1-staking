@@ -1,7 +1,3 @@
-/**
- *Submitted for verification at BscScan.com on 2021-05-25
-*/
-
 // SPDX-License-Identifier: MIT
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -10,19 +6,18 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 pragma solidity 0.8.20;
- 
+
 
 contract StakingPool is Ownable, ReentrancyGuard, Pausable {
 
     using SafeERC20 for IERC20;
 
-
     error ZeroAddressInserted();
     error ZeroAmountInserted();
     error StakingTokenTransfer();
     error FeeLimitExceeded();
-    error onlyGovernanceAuthorized()
-;
+    error onlyGovernanceAuthorized();
+
     address public tokenAddress;
     address public stakingFactoryAddress;
     address public rewardTokenAddress;
@@ -44,32 +39,40 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
 
     mapping(address => uint256) public lastUserDepositTime;
 
-
-        modifier zeroAddressCheck(address _address) {
+    modifier zeroAddressCheck(address _address) {
         if (_address == address(0)) {
             revert ZeroAddressInserted();
         }
         _;
     }
 
-        modifier zeroAmountCheck(uint256 amount) {
+    modifier zeroAmountCheck(uint256 amount) {
         if (amount == 0) {
             revert ZeroAmountInserted();
         }
         _;
     }
 
-        modifier onlyGovernance() {
+    modifier onlyGovernance() {
         if(msg.sender != govAddress)  revert onlyGovernanceAuthorized();
         _;
     }
 
+    /// @dev Initializes the StakingPool with essential parameters.
+    /// @param _stakingFactoryAddress Address of the StakingFactory contract.
+    /// @param _rewardTokenAddress Address of the reward token.
+    /// @param _feeReceiver Address to receive staking fees.
+    /// @param _tokenAddress Address of the token to be staked.
     constructor(
         address _stakingFactoryAddress,
         address _rewardTokenAddress,
         address _feeReceiver,
         address _tokenAddress
-    ) zeroAddressCheck(_stakingFactoryAddress) zeroAddressCheck(_rewardTokenAddress) zeroAddressCheck(_feeReceiver) zeroAddressCheck(_tokenAddress){
+    ) zeroAddressCheck(_stakingFactoryAddress) 
+        zeroAddressCheck(_rewardTokenAddress) 
+        zeroAddressCheck(_feeReceiver) 
+        zeroAddressCheck(_tokenAddress)
+    {
         govAddress = msg.sender;
         stakingFactoryAddress = _stakingFactoryAddress;
         rewardTokenAddress = _rewardTokenAddress;
@@ -78,9 +81,11 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         transferOwnership(stakingFactoryAddress);
     }
 
-
-
-    // Receives new deposits from user
+    /// @notice Allows a user to deposit tokens for staking.
+    /// @dev Only callable by the owner (StakingFactory).
+    /// @param _userAddress Address of the user depositing tokens.
+    /// @param _tokenAmt Amount of tokens to be deposited.
+    /// @return sharesAdded Amount of shares added to the user's balance.
     function deposit( address _userAddress,uint256 _tokenAmt)
         public
         onlyOwner
@@ -107,7 +112,11 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         return sharesAdded;
     }
 
-
+    /// @notice Allows a user to withdraw their staked tokens.
+    /// @dev Only callable by the owner (StakingFactory).
+    /// @param _userAddress Address of the user withdrawing tokens.
+    /// @param _tokenAmt Amount of tokens to be withdrawn.
+    /// @return tokenAmt Amount of tokens actually withdrawn (may be less than requested).
     function withdraw(address _userAddress,uint256 _tokenAmt)
         public
         onlyOwner
@@ -143,34 +152,68 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         return _tokenAmt;
     }
 
+    /// @notice Pauses the StakingPool contract, preventing deposits.
+    /// @dev Only callable by governance.
     function pause() public onlyGovernance {
         _pause();
     }
 
+    /// @notice Unpauses the StakingPool contract, allowing deposits.
+    /// @dev Only callable by governance.
     function unpause() external onlyGovernance {
         _unpause();
     }
 
+    /// @notice Sets the entrance fee factor for new deposits.
+    /// @dev Only callable by governance. 
+    /// @param _entranceFeeFactor The new entrance fee factor in basis points (BPS).
     function setEntranceFeeFactor(uint256 _entranceFeeFactor) public onlyGovernance {
         if (_entranceFeeFactor > entranceFeeFactorMax) revert FeeLimitExceeded();
         entranceFeeFactor = _entranceFeeFactor;
     }
 
+    /// @notice Sets the exit fee factor for withdrawals.
+    /// @dev Only callable by governance.
+    /// @param _exitFeeFactor The new exit fee factor in basis points (BPS).
     function setExitFeeFactor(uint256 _exitFeeFactor) public onlyGovernance {
-        if (_exitFeeFactor > exitFeeFactor) revert FeeLimitExceeded();
+        if (_exitFeeFactor > exitFeeFactorMax) revert FeeLimitExceeded();
         exitFeeFactor = _exitFeeFactor;
     }
 
+    /// @notice Changes the governance address.
+    /// @dev Only callable by the current governance address.
+    /// @param _govAddress The new governance address.
     function setGov(address _govAddress) public onlyGovernance zeroAddressCheck(_govAddress){
         govAddress = _govAddress;
     }
 
+
+    /// @notice Changes the fee receiver address.
+    /// @dev Only callable by the governance address.
+    /// @param _feeReceiver The new fee receiver address.
+    function setFeeReceiver(
+        address _feeReceiver
+    ) public onlyGovernance zeroAddressCheck(_feeReceiver) {
+        feeReceiver = _feeReceiver;
+    }
+
+    /// @notice Allows recovery of tokens accidentally sent to the contract (excluding the staking token).
+    /// @dev Only callable by governance.
+    /// @param _token Address of the stuck token.
+    /// @param _amount Amount of tokens to recover.
+    /// @param _to Address to send the recovered tokens to.
     function inCaseTokensGetStuck(
         address _token,
         uint256 _amount,
         address _to
-    ) public onlyGovernance zeroAddressCheck(_token) zeroAddressCheck(_to) zeroAmountCheck(_amount){
-        if (_token ==tokenAddress ) revert StakingTokenTransfer();
+    )
+        public
+        onlyGovernance
+        zeroAddressCheck(_token)
+        zeroAddressCheck(_to)
+        zeroAmountCheck(_amount)
+    {
+        if (_token == tokenAddress) revert StakingTokenTransfer();
         IERC20(_token).safeTransfer(_to, _amount);
     }
 }
