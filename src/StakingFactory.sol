@@ -4,12 +4,13 @@ pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "./Authorizable.sol";
 import "./interfaces/IStakingPool.sol";
 
 /// @title StakingFactory
 /// @notice This contract manages multiple StakingPool contracts and distributes rewards to users who stake their LP tokens.
-contract StakingFactory is Authorizable, ReentrancyGuard {
+contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     error ZeroAmountInserted();
@@ -110,7 +111,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         zeroAllocCheck(_allocPoint)
         zeroAddressCheck(address(poolToken))
         zeroAddressCheck(_pool)
-        onlyAuthorized
+        onlyAuthorised
     {
         if (poolsAdded[address(poolToken)]) revert TokenPoolAlreadyAdded();
         if (_withUpdate) {
@@ -139,7 +140,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         uint256 _pid,
         uint256 _allocPoint,
         bool _withUpdate
-    ) external zeroAllocCheck(_allocPoint) validPID(_pid) onlyAuthorized {
+    ) external zeroAllocCheck(_allocPoint) validPID(_pid) onlyAuthorised {
         if (_withUpdate) {
             massUpdatePools();
         }
@@ -185,7 +186,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
     function deposit(
         uint256 _pid,
         uint256 poolTokenAmt
-    ) external nonReentrant validPID(_pid) zeroAmountCheck(poolTokenAmt) {
+    ) external nonReentrant whenNotPaused validPID(_pid) zeroAmountCheck(poolTokenAmt) {
         updatePool(_pid);
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
@@ -366,7 +367,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
     function withdraw(
         uint256 _pid,
         uint256 poolTokenAmt
-    ) public nonReentrant validPID(_pid) zeroAmountCheck(poolTokenAmt) {
+    ) public nonReentrant whenNotPaused validPID(_pid) zeroAmountCheck(poolTokenAmt) {
         updatePool(_pid);
 
         PoolInfo storage pool = poolInfo[_pid];

@@ -7,6 +7,10 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+/**
+ * @title StakingPool
+ * @dev This contract handles the staking of tokens with entrance and exit fees.
+ */
 contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
@@ -16,25 +20,49 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     error FeeLimitExceeded();
     error onlyGovernanceAuthorized();
 
-    address public tokenAddress;
-    address public stakingFactoryAddress;
-    address public rewardTokenAddress;
-    address public govAddress; // timelock contract
+    /// @notice Address of the token to be staked
+    address public immutable tokenAddress;
+    
+    /// @notice Address of the staking factory
+    address public immutable stakingFactoryAddress;
+    
+    /// @notice Address of the reward token
+    address public immutable rewardTokenAddress;
+    
+    /// @notice Address of the governance (timelock) contract
+    address public govAddress;
+    
+    /// @notice Address of the fee receiver
     address public feeReceiver;
 
+    /// @notice The block number of the last earnings distribution
     uint256 public lastEarnBlock = 0;
+    
+    /// @notice Total amount of tokens locked in the contract
     uint256 public tokenLockedTotal = 0;
+    
+    /// @notice Total amount of shares in the contract
     uint256 public sharesTotal = 0;
 
+    /// @notice Basis points (BPS) constant for fee calculations
     uint256 public constant ONE_IN_BPS = 10000;
 
-    uint256 public entranceFeeFactor = 30; // 0.3% entrance fee. set in BPS
-    uint256 public constant entranceFeeFactorMax = 50; // 0.5% is the max entrance fee settable. set in BPS
+    /// @notice Entrance fee factor (0.3% entrance fee, set in BPS)
+    uint256 public entranceFeeFactor = 30;
+    
+    /// @notice Maximum entrance fee factor allowed (0.5%, set in BPS)
+    uint256 public constant entranceFeeFactorMax = 50;
 
-    uint256 public exitFeeFactor = 30; // 0.3% exit fee. set in BPS
-    uint256 public constant exitFeeFactorMax = 50; // 0.5% is the max exit fee settable. set in BPS
-    uint256 public constant WITHDRAW_FEE_PERIOD = 72 hours; //amount of time that a user must wait after a deposit to not be charged the exit fee
+    /// @notice Exit fee factor (0.3% exit fee, set in BPS)
+    uint256 public exitFeeFactor = 30;
+    
+    /// @notice Maximum exit fee factor allowed (0.5%, set in BPS)
+    uint256 public constant exitFeeFactorMax = 50;
+    
+    /// @notice Time period that a user must wait after a deposit to not be charged the exit fee (72 hours)
+    uint256 public constant WITHDRAW_FEE_PERIOD = 72 hours;
 
+    /// @notice Mapping to store the last deposit time for each user
     mapping(address => uint256) public lastUserDepositTime;
 
     modifier zeroAddressCheck(address _address) {

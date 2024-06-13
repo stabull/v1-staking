@@ -23,7 +23,7 @@ contract StakingFactoryTest is Test {
     address user2 = address(0x3);
     address user3 = address(0x4);
     address fundSource = address(0x35);
-    address newAuthorized = address(5);
+    address newAuthorised = address(5);
     address randomAddress = address(6);
 
     uint256 DECIMAL = 10 ** 18;
@@ -115,7 +115,7 @@ contract StakingFactoryTest is Test {
 
     function testUserCannotAddPool() public {
         vm.startPrank(user);
-        vm.expectRevert(bytes4(keccak256("UnAuthorized()")));
+        vm.expectRevert(bytes4(keccak256("UnAuthorised()")));
         stakingFactory.add(100, lpToken, true, address(stakingPool));
 
         vm.stopPrank();
@@ -1413,53 +1413,53 @@ contract StakingFactoryTest is Test {
 
         // Owner adds a new authorized address
         vm.startPrank(owner);
-        stakingFactory.addAuthorized(newAuthorized);
+        stakingFactory.addAuthorised(newAuthorised);
         vm.stopPrank();
-        assertTrue(stakingFactory.isAuthorised(newAuthorized));
+        assertTrue(stakingFactory.isAuthorised(newAuthorised));
 
         // Attempt to add authorized address by non-owner
         vm.startPrank(randomAddress);
         vm.expectRevert("Ownable: caller is not the owner");
-        stakingFactory.addAuthorized(randomAddress);
+        stakingFactory.addAuthorised(randomAddress);
         vm.stopPrank();
 
         // Owner removes the new authorized address
         vm.startPrank(owner);
-        stakingFactory.removeAuthorized(newAuthorized);
+        stakingFactory.removeAuthorised(newAuthorised);
         vm.stopPrank();
-        assertFalse(stakingFactory.isAuthorised(newAuthorized));
+        assertFalse(stakingFactory.isAuthorised(newAuthorised));
 
         // Verify that the owner cannot remove themselves
         vm.startPrank(owner);
-        vm.expectRevert("Owner can not be removed");
-        stakingFactory.removeAuthorized(owner);
+        vm.expectRevert("Owner cannot be removed");
+        stakingFactory.removeAuthorised(owner);
         vm.stopPrank();
 
         // Verify that non-authorized addresses cannot call restricted functions
         vm.startPrank(randomAddress);
-        vm.expectRevert(bytes4(keccak256("UnAuthorized()")));
+        vm.expectRevert(bytes4(keccak256("UnAuthorised()")));
         stakingFactory.add(100, lpToken, true, address(stakingPool));
         vm.stopPrank();
 
         // Add new authorized address again
         vm.startPrank(owner);
-        stakingFactory.addAuthorized(newAuthorized);
+        stakingFactory.addAuthorised(newAuthorised);
         vm.stopPrank();
 
         // Verify that the new authorized address can call restricted functions
-        vm.startPrank(newAuthorized);
+        vm.startPrank(newAuthorised);
         stakingFactory.add(100, lpToken, true, address(stakingPool));
         vm.stopPrank();
 
         // Ensure adding a zero address is not allowed
         vm.startPrank(owner);
         vm.expectRevert("Zero Address inserted");
-        stakingFactory.addAuthorized(address(0));
+        stakingFactory.addAuthorised(address(0));
         vm.stopPrank();
 
         // Ensure removing a zero address does not revert but has no effect
         vm.startPrank(owner);
-        stakingFactory.removeAuthorized(address(0));
+        stakingFactory.removeAuthorised(address(0));
         vm.stopPrank();
     }
 
