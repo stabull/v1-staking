@@ -7,8 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./Authorizable.sol";
 import "./interfaces/IStakingPool.sol";
 
-import {Test, console2} from "forge-std/Test.sol";
-
+/// @title StakingFactory
+/// @notice This contract manages multiple StakingPool contracts and distributes rewards to users who stake their LP tokens.
 contract StakingFactory is Authorizable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -22,52 +22,41 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
     error RewardTokenTransfer();
     error TokenPoolAlreadyAdded();
 
-    // Info of each user.
+    /// @dev Struct to store information about each user's stake in a pool.
     struct UserInfo {
         uint256 shares; // How many LP tokens the user has provided.
-        uint256 rewardDebt; // Reward debt. See explanation below.
-
-        // We do some fancy math here. Basically, any point in time, the amount of rewardToken
-        // entitled to a user but is pending to be distributed is:
-        //
-        //   amount = user.shares / sharesTotal * tokenLockedTotal
-        //   pending reward = (amount * pool.accRewardTokenPerShare) - user.rewardDebt
-        //
-        // Whenever a user deposits or withdraws token tokens to a pool. Here's what happens:
-        //   1. The pool's `accRewardTokenPerShare` (and `lastRewardBlock`) gets updated.
-        //   2. User receives the pending reward sent to his/her address.
-        //   3. User's `amount` gets updated.
-        //   4. User's `rewardDebt` gets updated.
+        uint256 rewardDebt; // Reward debt.
     }
 
+    /// @dev Struct to store information about each staking pool.
     struct PoolInfo {
         IERC20 token; // Address of the pool token.
-        uint256 allocPoint; // How many allocation points assigned to this pool. rewardToken to distribute per block.
-        uint256 lastRewardBlock; // Last block number that rewardToken distribution occurs.
-        uint256 accRewardTokenPerShare; // Accumulated rewardToken per share, times 1e12. See below.
-        address pool; // Staking Pool address that will auto compound pool tokens
+        uint256 allocPoint; // Allocation points assigned to the pool.
+        uint256 lastRewardBlock; // Last block number where reward distribution occurred.
+        uint256 accRewardTokenPerShare; // Accumulated reward tokens per share, times 1e12.
+        address pool; // Staking Pool address.
     }
 
-    address public rewardToken;
-    address public fundSource; //source of rewardToken tokens to pull from
-
-    // address public burnAddress = 0x000000000000000000000000000000000000dEaD;
-
-    //initialize at zero and update later
-    uint256 public rewardTokenPerBlock = 0; // rewardToken tokens distributed per block
-
-    PoolInfo[] public poolInfo; // Info of each pool.
-    mapping(uint256 => mapping(address => UserInfo)) public userInfo; // Info of each user that stakes LP tokens.
-    mapping(address => bool) public poolsAdded;
-    uint256 public totalAllocPoint = 0; // Total allocation points. Must be the sum of all allocation points in all pools.
-
+    /// @notice Emitted when a user deposits LP tokens into a pool.
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
+    /// @notice Emitted when a user withdraws LP tokens from a pool.
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
+    /// @notice Emitted when a user performs an emergency withdrawal from a pool.
     event EmergencyWithdraw(
         address indexed user,
         uint256 indexed pid,
         uint256 amount
     );
+
+    address public rewardToken;
+    address public fundSource; // Source of reward tokens.
+
+    uint256 public rewardTokenPerBlock; // Reward tokens distributed per block.
+
+    PoolInfo[] public poolInfo; // Array of all pools.
+    mapping(uint256 => mapping(address => UserInfo)) public userInfo; // User stake information for each pool.
+    mapping(address => bool) public poolsAdded; // Tracks if a pool token has already been added.
+    uint256 public totalAllocPoint; // Total allocation points across all pools.
 
     modifier zeroAmountCheck(uint256 amount) {
         if (amount == 0) {
@@ -105,27 +94,19 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         fundSource = _fundSource;
     }
 
-    /// @notice Returns the number of pools managed by the factory.
-    /// @return The length of the `poolInfo` array.
-    function poolLength() external view returns (uint256) {
-        return poolInfo.length;
-    }
-
     /// @notice Adds a new staking pool to the factory.
     /// @dev Only callable by the contract owner.
     /// @param _allocPoint Allocation points assigned to the new pool. This determines the share of rewards the pool receives.
     /// @param poolToken The address of the LP token that will be staked in the pool.
     /// @param _withUpdate Boolean indicating whether to update reward variables before adding the pool.
     /// @param _pool The address of the `StakingPool` contract associated with the new pool.
-
     function add(
         uint256 _allocPoint,
         IERC20 poolToken,
         bool _withUpdate,
         address _pool
     )
-        public
-        onlyOwner
+        external
         zeroAllocCheck(_allocPoint)
         zeroAddressCheck(address(poolToken))
         zeroAddressCheck(_pool)
@@ -158,13 +139,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         uint256 _pid,
         uint256 _allocPoint,
         bool _withUpdate
-    )
-        public
-        onlyOwner
-        zeroAllocCheck(_allocPoint)
-        validPID(_pid)
-        onlyAuthorized
-    {
+    ) external zeroAllocCheck(_allocPoint) validPID(_pid) onlyAuthorized {
         if (_withUpdate) {
             massUpdatePools();
         }
@@ -175,15 +150,164 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         poolInfo[_pid].allocPoint = _allocPoint;
     }
 
-    /// @notice Calculates the reward multiplier over a given block range.
-    /// @param _from The starting block number.
-    /// @param _to The ending block number.
-    /// @return The calculated reward multiplier.
-    function getMultiplier(
-        uint256 _from,
-        uint256 _to
-    ) public pure returns (uint256) {
-        return _to - (_from);
+    /// @notice Sets the number of reward tokens to be distributed per block.
+    /// @dev Only callable by the contract owner.
+    /// @param _rewardTokenPerBlock The new reward token amount per block.
+    function setRewardTokenPerBlock(
+        uint256 _rewardTokenPerBlock
+    ) external onlyOwner zeroAmountCheck(_rewardTokenPerBlock) {
+        rewardTokenPerBlock = _rewardTokenPerBlock;
+    }
+
+    /// @notice Sets the address from which reward tokens will be pulled for distribution.
+    /// @dev Only callable by the contract owner.
+    /// @param _fundSource The new fund source address.
+    function setFundSource(
+        address _fundSource
+    ) external onlyOwner zeroAddressCheck(_fundSource) {
+        fundSource = _fundSource;
+    }
+
+    /// @notice Allows the contract owner to recover tokens (other than the reward token) accidentally sent to the contract.
+    /// @param _token The address of the stuck token.
+    /// @param _amount The amount of tokens to recover.
+    function inCaseTokensGetStuck(
+        address _token,
+        uint256 _amount
+    ) external zeroAddressCheck(_token) zeroAmountCheck(_amount) onlyOwner {
+        if (_token == rewardToken) revert RewardTokenTransfer();
+        IERC20(_token).safeTransfer(msg.sender, _amount);
+    }
+
+    /// @notice Allows a user to deposit LP tokens into a specific pool for staking.
+    /// @param _pid The pool ID.
+    /// @param poolTokenAmt The amount of LP tokens to deposit.
+    function deposit(
+        uint256 _pid,
+        uint256 poolTokenAmt
+    ) external nonReentrant validPID(_pid) zeroAmountCheck(poolTokenAmt) {
+        updatePool(_pid);
+        PoolInfo storage pool = poolInfo[_pid];
+        UserInfo storage user = userInfo[_pid][msg.sender];
+
+        if (user.shares > 0) {
+            uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
+                (1e12) -
+                (user.rewardDebt);
+            if (pending > 0) {
+                safeRewardTokenTransfer(msg.sender, pending);
+            }
+        }
+        if (poolTokenAmt > 0) {
+            pool.token.safeTransferFrom(
+                address(msg.sender),
+                address(this),
+                poolTokenAmt
+            );
+
+            pool.token.safeIncreaseAllowance(pool.pool, poolTokenAmt);
+            uint256 sharesAdded = IStakingPool(poolInfo[_pid].pool).deposit(
+                msg.sender,
+                poolTokenAmt
+            );
+            user.shares = user.shares + (sharesAdded);
+        }
+        user.rewardDebt =
+            (user.shares * (pool.accRewardTokenPerShare)) /
+            (1e12);
+        emit Deposit(msg.sender, _pid, poolTokenAmt);
+    }
+
+    /// @notice Allows a user to withdraw all their staked LP tokens and accrued rewards from a specific pool.
+    /// @param _pid The pool ID.
+    function withdrawAll(uint256 _pid) external {
+        withdraw(_pid, type(uint256).max);
+    }
+
+    /// @notice Allows a user to claim their accrued rewards from a specific pool without withdrawing LP tokens.
+    /// @param _pid The pool ID.
+    function claimReward(uint256 _pid) external nonReentrant validPID(_pid) {
+        updatePool(_pid);
+
+        PoolInfo storage pool = poolInfo[_pid];
+        UserInfo storage user = userInfo[_pid][msg.sender];
+
+        uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
+        if (user.shares == 0) revert UserSharesZero();
+        if (sharesTotal == 0) revert TotalSharesZero();
+
+        // Withdraw pending rewardToken
+        uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
+            (1e12) -
+            (user.rewardDebt);
+        if (pending > 0) {
+            safeRewardTokenTransfer(msg.sender, pending);
+        }
+        user.rewardDebt =
+            (user.shares * (pool.accRewardTokenPerShare)) /
+            (1e12);
+    }
+
+    /// @notice Allows a user to claim their accrued rewards from multiple pools.
+    /// @param _pids An array of pool IDs.
+    function claimRewardMultiple(uint256[] memory _pids) external nonReentrant {
+        for (uint256 i = 0; i < _pids.length; i++) {
+            uint256 _pid = _pids[i];
+            if (_pid >= poolInfo.length) revert InvalidPID();
+            updatePool(_pid);
+
+            PoolInfo storage pool = poolInfo[_pid];
+            UserInfo storage user = userInfo[_pid][msg.sender];
+
+            uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool)
+                .sharesTotal();
+            if (user.shares == 0) revert UserSharesZero();
+            if (sharesTotal == 0) revert TotalSharesZero();
+
+            // Withdraw pending rewardToken
+            uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
+                (1e12) -
+                (user.rewardDebt);
+            if (pending > 0) {
+                safeRewardTokenTransfer(msg.sender, pending);
+            }
+            user.rewardDebt =
+                (user.shares * (pool.accRewardTokenPerShare)) /
+                (1e12);
+        }
+    }
+
+    /// @notice Allows a user to withdraw their staked LP tokens from a specific pool without claiming rewards.
+    /// @dev This function is for emergency situations and should be used with caution.
+    /// @param _pid The pool ID.
+    function emergencyWithdraw(
+        uint256 _pid
+    ) external nonReentrant validPID(_pid) {
+        PoolInfo storage pool = poolInfo[_pid];
+        UserInfo storage user = userInfo[_pid][msg.sender];
+
+        uint256 tokenLockedTotal = IStakingPool(poolInfo[_pid].pool)
+            .tokenLockedTotal();
+        uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
+        uint256 amount = (user.shares * (tokenLockedTotal)) / (sharesTotal);
+
+        IStakingPool(poolInfo[_pid].pool).withdraw(msg.sender, amount);
+
+        uint256 poolBalance = IERC20(pool.token).balanceOf(address(this));
+        if (amount > poolBalance) {
+            amount = poolBalance;
+        }
+
+        pool.token.safeTransfer(address(msg.sender), amount);
+        emit EmergencyWithdraw(msg.sender, _pid, amount);
+        user.shares = 0;
+        user.rewardDebt = 0;
+    }
+
+    /// @notice Returns the number of pools managed by the factory.
+    /// @return The length of the `poolInfo` array.
+    function poolLength() external view returns (uint256) {
+        return poolInfo.length;
     }
 
     /// @notice Returns the pending reward tokens for a user in a specific pool.
@@ -220,7 +344,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
     /// @param _pid The pool ID.
     /// @param _user The address of the user.
     /// @return The amount of staked LP tokens.
-    function stakedtokenTokens(
+    function stakedTokensAmount(
         uint256 _pid,
         address _user
     ) external view validPID(_pid) returns (uint256) {
@@ -234,85 +358,6 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             return 0;
         }
         return (user.shares * (tokenLockedTotal)) / (sharesTotal);
-    }
-
-    /// @notice Updates reward variables for all pools.
-    /// @dev This function can be expensive in terms of gas, so use it carefully.
-    function massUpdatePools() public {
-        uint256 length = poolInfo.length;
-        for (uint256 pid = 0; pid < length; ++pid) {
-            updatePool(pid);
-        }
-    }
-
-    /// @notice Updates the reward variables of a specific pool.
-    /// @param _pid The pool ID.
-    function updatePool(uint256 _pid) public validPID(_pid) {
-        PoolInfo storage pool = poolInfo[_pid];
-        if (block.number <= pool.lastRewardBlock) {
-            return;
-        }
-        uint256 sharesTotal = IStakingPool(pool.pool).sharesTotal();
-        if (sharesTotal == 0) {
-            pool.lastRewardBlock = block.number;
-            return;
-        }
-        uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
-        if (multiplier <= 0) {
-            return;
-        }
-        uint256 rewardTokenReward = (multiplier *
-            (rewardTokenPerBlock) *
-            (pool.allocPoint)) / (totalAllocPoint);
-
-        getRewardToken(rewardTokenReward);
-        console2.log(
-            "updatePool ~ pool.accRewardTokenPerShare:",
-            pool.accRewardTokenPerShare
-        );
-        pool.accRewardTokenPerShare =
-            pool.accRewardTokenPerShare +
-            ((rewardTokenReward * (1e12)) / (sharesTotal));
-        pool.lastRewardBlock = block.number;
-    }
-
-    /// @notice Allows a user to deposit LP tokens into a specific pool for staking.
-    /// @param _pid The pool ID.
-    /// @param poolTokenAmt The amount of LP tokens to deposit.
-    function deposit(
-        uint256 _pid,
-        uint256 poolTokenAmt
-    ) public nonReentrant validPID(_pid) zeroAmountCheck(poolTokenAmt) {
-        updatePool(_pid);
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-
-        if (user.shares > 0) {
-            uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
-                (1e12) -
-                (user.rewardDebt);
-            if (pending > 0) {
-                safeRewardTokenTransfer(msg.sender, pending);
-            }
-        }
-        if (poolTokenAmt > 0) {
-            pool.token.safeTransferFrom(
-                address(msg.sender),
-                address(this),
-                poolTokenAmt
-            );
-
-            pool.token.safeIncreaseAllowance(pool.pool, poolTokenAmt);
-            uint256 sharesAdded = IStakingPool(poolInfo[_pid].pool).deposit(
-                msg.sender,
-                poolTokenAmt
-            );
-            user.shares = user.shares + (sharesAdded);
-        }
-        user.rewardDebt =
-            (user.shares * (pool.accRewardTokenPerShare)) /
-            (1e12);
-        emit Deposit(msg.sender, _pid, poolTokenAmt);
     }
 
     /// @notice Allows a user to withdraw their staked LP tokens from a specific pool.
@@ -375,89 +420,52 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
         emit Withdraw(msg.sender, _pid, poolTokenAmt);
     }
 
-    /// @notice Allows a user to withdraw all their staked LP tokens and accrued rewards from a specific pool.
+    /// @notice Updates the reward variables of a specific pool.
     /// @param _pid The pool ID.
-    function withdrawAll(uint256 _pid) public {
-        withdraw(_pid, type(uint256).max);
-    }
-
-    /// @notice Allows a user to claim their accrued rewards from a specific pool without withdrawing LP tokens.
-    /// @param _pid The pool ID.
-    function claimReward(uint256 _pid) public nonReentrant validPID(_pid) {
-        updatePool(_pid);
-
+    function updatePool(uint256 _pid) public validPID(_pid) {
         PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-
-        uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
-        if (user.shares == 0) revert UserSharesZero();
-        if (sharesTotal == 0) revert TotalSharesZero();
-
-        // Withdraw pending rewardToken
-        uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
-            (1e12) -
-            (user.rewardDebt);
-        if (pending > 0) {
-            safeRewardTokenTransfer(msg.sender, pending);
+        if (block.number <= pool.lastRewardBlock) {
+            return;
         }
-        user.rewardDebt =
-            (user.shares * (pool.accRewardTokenPerShare)) /
-            (1e12);
+        uint256 sharesTotal = IStakingPool(pool.pool).sharesTotal();
+        if (sharesTotal == 0) {
+            pool.lastRewardBlock = block.number;
+            return;
+        }
+        uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
+        if (multiplier <= 0) {
+            return;
+        }
+        uint256 rewardTokenReward = (multiplier *
+            (rewardTokenPerBlock) *
+            (pool.allocPoint)) / (totalAllocPoint);
+
+        getRewardToken(rewardTokenReward);
+
+        pool.accRewardTokenPerShare =
+            pool.accRewardTokenPerShare +
+            ((rewardTokenReward * (1e12)) / (sharesTotal));
+        pool.lastRewardBlock = block.number;
     }
 
-    /// @notice Allows a user to claim their accrued rewards from multiple pools.
-    /// @param _pids An array of pool IDs.
-    function claimRewardMulitple(uint256[] memory _pids) public nonReentrant {
-        for (uint i = 0; i < _pids.length; i++) {
-            uint256 _pid = _pids[i];
-            if (_pid >= poolInfo.length) revert InvalidPID();
-            updatePool(_pid);
-
-            PoolInfo storage pool = poolInfo[_pid];
-            UserInfo storage user = userInfo[_pid][msg.sender];
-
-            uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool)
-                .sharesTotal();
-            if (user.shares == 0) revert UserSharesZero();
-            if (sharesTotal == 0) revert TotalSharesZero();
-
-            // Withdraw pending rewardToken
-            uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
-                (1e12) -
-                (user.rewardDebt);
-            if (pending > 0) {
-                safeRewardTokenTransfer(msg.sender, pending);
-            }
-            user.rewardDebt =
-                (user.shares * (pool.accRewardTokenPerShare)) /
-                (1e12);
+    /// @notice Updates reward variables for all pools.
+    /// @dev This function can be expensive in terms of gas, so use it carefully.
+    function massUpdatePools() public {
+        uint256 length = poolInfo.length;
+        for (uint256 pid = 0; pid < length; ++pid) {
+            updatePool(pid);
         }
     }
 
-    /// @notice Allows a user to withdraw their staked LP tokens from a specific pool without claiming rewards.
-    /// @dev This function is for emergency situations and should be used with caution.
-    function emergencyWithdraw(
-        uint256 _pid
-    ) public nonReentrant validPID(_pid) {
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-
-        uint256 tokenLockedTotal = IStakingPool(poolInfo[_pid].pool)
-            .tokenLockedTotal();
-        uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
-        uint256 amount = (user.shares * (tokenLockedTotal)) / (sharesTotal);
-
-        IStakingPool(poolInfo[_pid].pool).withdraw(msg.sender, amount);
-
-        uint256 poolBalance = IERC20(pool.token).balanceOf(address(this));
-        if (amount > poolBalance) {
-            amount = poolBalance;
-        }
-
-        pool.token.safeTransfer(address(msg.sender), amount);
-        emit EmergencyWithdraw(msg.sender, _pid, amount);
-        user.shares = 0;
-        user.rewardDebt = 0;
+    /// @notice Calculates the reward multiplier over a given block range.
+    /// @param _from The starting block number.
+    /// @param _to The ending block number.
+    /// @return The calculated reward multiplier.
+    function getMultiplier(
+        uint256 _from,
+        uint256 _to
+    ) public pure returns (uint256) {
+        return _to - (_from);
     }
 
     /// @dev Internal function to safely transfer reward tokens to a user.
@@ -485,34 +493,5 @@ contract StakingFactory is Authorizable, ReentrancyGuard {
             address(this),
             _rewardTokenAmt
         );
-    }
-
-    /// @notice Sets the address from which reward tokens will be pulled for distribution.
-    /// @dev Only callable by the contract owner.
-    /// @param _fundSource The new fund source address.
-    function setFundSource(
-        address _fundSource
-    ) external onlyOwner zeroAddressCheck(_fundSource) {
-        fundSource = _fundSource;
-    }
-
-    /// @notice Allows the contract owner to recover tokens (other than the reward token) accidentally sent to the contract.
-    /// @param _token The address of the stuck token.
-    /// @param _amount The amount of tokens to recover.
-    function inCaseTokensGetStuck(
-        address _token,
-        uint256 _amount
-    ) external zeroAddressCheck(_token) zeroAmountCheck(_amount) onlyOwner {
-        if (_token == rewardToken) revert RewardTokenTransfer();
-        IERC20(_token).safeTransfer(msg.sender, _amount);
-    }
-
-    /// @notice Sets the number of reward tokens to be distributed per block.
-    /// @dev Only callable by the contract owner.
-    /// @param _rewardTokenPerBlock The new reward token amount per block.
-    function setRewardTokenPerBlock(
-        uint256 _rewardTokenPerBlock
-    ) external onlyOwner zeroAmountCheck(_rewardTokenPerBlock) {
-        rewardTokenPerBlock = _rewardTokenPerBlock;
     }
 }
