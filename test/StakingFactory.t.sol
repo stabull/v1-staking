@@ -114,7 +114,7 @@ contract StakingFactoryTest is Test {
 
     function testUserCannotAddPool() public {
         vm.startPrank(user);
-        vm.expectRevert(bytes4(keccak256("UnAuthorised()")));
+        vm.expectRevert("Ownable: caller is not the owner");
         stakingFactory.add(100, address(lpToken), true, address(stakingPool));
 
         vm.stopPrank();
@@ -1475,7 +1475,7 @@ contract StakingFactoryTest is Test {
 
         // Verify that non-authorized addresses cannot call restricted functions
         vm.startPrank(randomAddress);
-        vm.expectRevert(bytes4(keccak256("UnAuthorised()")));
+        vm.expectRevert("Ownable: caller is not the owner");
         stakingFactory.add(100, address(lpToken), true, address(stakingPool));
         vm.stopPrank();
 
@@ -1486,6 +1486,7 @@ contract StakingFactoryTest is Test {
 
         // Verify that the new authorized address can call restricted functions
         vm.startPrank(newAuthorised);
+        vm.expectRevert("Ownable: caller is not the owner");
         stakingFactory.add(100, address(lpToken), true, address(stakingPool));
         vm.stopPrank();
 
