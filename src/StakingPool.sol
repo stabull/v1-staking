@@ -16,31 +16,24 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
 
     error ZeroAddressInserted();
     error ZeroAmountInserted();
-    error StakingTokenTransfer();
     error FeeLimitExceeded();
     error onlyGovernanceAuthorized();
 
     /// @notice Address of the token to be staked
     address public immutable tokenAddress;
-    
+
     /// @notice Address of the staking factory
-    address public immutable stakingFactoryAddress;
-    
-    /// @notice Address of the reward token
-    address public immutable rewardTokenAddress;
-    
+    address public stakingFactoryAddress;
+
     /// @notice Address of the governance (timelock) contract
     address public govAddress;
-    
+
     /// @notice Address of the fee receiver
     address public feeReceiver;
 
-    /// @notice The block number of the last earnings distribution
-    uint256 public lastEarnBlock = 0;
-    
     /// @notice Total amount of tokens locked in the contract
     uint256 public tokenLockedTotal = 0;
-    
+
     /// @notice Total amount of shares in the contract
     uint256 public sharesTotal = 0;
 
@@ -49,18 +42,18 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
 
     /// @notice Entrance fee factor (0.3% entrance fee, set in BPS)
     uint256 public entranceFeeFactor = 30;
-    
+
     /// @notice Maximum entrance fee factor allowed (0.5%, set in BPS)
-    uint256 public constant entranceFeeFactorMax = 50;
+    uint256 public constant ENTERANCE_FEE_FACTOR_MAX = 50;
 
     /// @notice Exit fee factor (0.3% exit fee, set in BPS)
     uint256 public exitFeeFactor = 30;
-    
+
     /// @notice Maximum exit fee factor allowed (0.5%, set in BPS)
-    uint256 public constant exitFeeFactorMax = 50;
-    
+    uint256 public constant EXIT_FEE_FACTOR_MAX = 50;
+
     /// @notice Time period that a user must wait after a deposit to not be charged the exit fee (72 hours)
-    uint256 public constant WITHDRAW_FEE_PERIOD = 72 hours;
+    uint256 public withdrawFeePeriod = 72 hours;
 
     /// @notice Mapping to store the last deposit time for each user
     mapping(address => uint256) public lastUserDepositTime;
@@ -86,23 +79,19 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
 
     /// @dev Initializes the StakingPool with essential parameters.
     /// @param _stakingFactoryAddress Address of the StakingFactory contract.
-    /// @param _rewardTokenAddress Address of the reward token.
     /// @param _feeReceiver Address to receive staking fees.
     /// @param _tokenAddress Address of the token to be staked.
     constructor(
         address _stakingFactoryAddress,
-        address _rewardTokenAddress,
         address _feeReceiver,
         address _tokenAddress
     )
         zeroAddressCheck(_stakingFactoryAddress)
-        zeroAddressCheck(_rewardTokenAddress)
         zeroAddressCheck(_feeReceiver)
         zeroAddressCheck(_tokenAddress)
     {
         govAddress = msg.sender;
         stakingFactoryAddress = _stakingFactoryAddress;
-        rewardTokenAddress = _rewardTokenAddress;
         feeReceiver = _feeReceiver;
         tokenAddress = _tokenAddress;
         transferOwnership(stakingFactoryAddress);
@@ -121,6 +110,7 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         onlyOwner
         whenNotPaused
         zeroAmountCheck(_tokenAmt)
+        nonReentrant
         zeroAddressCheck(_userAddress)
         returns (uint256)
     {
@@ -130,7 +120,7 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
             _tokenAmt
         );
 
-        uint256 feeAmount = _tokenAmt * entranceFeeFactor / ONE_IN_BPS;
+        uint256 feeAmount = (_tokenAmt * entranceFeeFactor) / ONE_IN_BPS;
         IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
         uint256 sharesAdded = _tokenAmt - feeAmount;
 
@@ -173,11 +163,17 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         sharesTotal -= sharesRemoved;
         tokenLockedTotal -= _tokenAmt;
 
-        uint256 feeAmount = _tokenAmt * exitFeeFactor / ONE_IN_BPS;
         // user only pays fee if they have a recent last deposit
-        if (lastUserDepositTime[_userAddress] + WITHDRAW_FEE_PERIOD >= block.timestamp) {
+        if (
+            lastUserDepositTime[_userAddress] + withdrawFeePeriod >=
+            block.timestamp
+        ) {
+            uint256 feeAmount = (_tokenAmt * exitFeeFactor) / ONE_IN_BPS;
             IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
-            IERC20(tokenAddress).safeTransfer(stakingFactoryAddress, _tokenAmt - feeAmount);
+            IERC20(tokenAddress).safeTransfer(
+                stakingFactoryAddress,
+                _tokenAmt - feeAmount
+            );
         } else {
             IERC20(tokenAddress).safeTransfer(stakingFactoryAddress, _tokenAmt);
         }
@@ -200,8 +196,11 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     /// @notice Sets the entrance fee factor for new deposits.
     /// @dev Only callable by governance.
     /// @param _entranceFeeFactor The new entrance fee factor in basis points (BPS).
-    function setEntranceFeeFactor(uint256 _entranceFeeFactor) external onlyGovernance {
-        if (_entranceFeeFactor > entranceFeeFactorMax) revert FeeLimitExceeded();
+    function setEntranceFeeFactor(
+        uint256 _entranceFeeFactor
+    ) external onlyGovernance {
+        if (_entranceFeeFactor > ENTERANCE_FEE_FACTOR_MAX)
+            revert FeeLimitExceeded();
         entranceFeeFactor = _entranceFeeFactor;
     }
 
@@ -209,23 +208,29 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     /// @dev Only callable by governance.
     /// @param _exitFeeFactor The new exit fee factor in basis points (BPS).
     function setExitFeeFactor(uint256 _exitFeeFactor) external onlyGovernance {
-        if (_exitFeeFactor > exitFeeFactorMax) revert FeeLimitExceeded();
+         if (_exitFeeFactor > EXIT_FEE_FACTOR_MAX)
+            revert FeeLimitExceeded();
         exitFeeFactor = _exitFeeFactor;
     }
 
     /// @notice Changes the governance address.
     /// @dev Only callable by the current governance address.
     /// @param _govAddress The new governance address.
-    function setGov(address _govAddress) external onlyGovernance zeroAddressCheck(_govAddress) {
+    function setGov(
+        address _govAddress
+    ) external onlyGovernance zeroAddressCheck(_govAddress) {
         govAddress = _govAddress;
     }
 
     /// @notice Changes the fee receiver address.
     /// @dev Only callable by the governance address.
     /// @param _feeReceiver The new fee receiver address.
-    function setFeeReceiver(address _feeReceiver) external onlyGovernance zeroAddressCheck(_feeReceiver) {
+    function setFeeReceiver(
+        address _feeReceiver
+    ) external onlyGovernance zeroAddressCheck(_feeReceiver) {
         feeReceiver = _feeReceiver;
     }
+
 
     /// @notice Allows recovery of tokens accidentally sent to the contract (excluding the staking token).
     /// @dev Only callable by governance.
@@ -243,7 +248,18 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         zeroAddressCheck(_to)
         zeroAmountCheck(_amount)
     {
-        if (_token == tokenAddress) revert StakingTokenTransfer();
         IERC20(_token).safeTransfer(_to, _amount);
     }
+
+    /**
+     * @notice Sets the withdrawal fee period.
+     * @dev This function can only be called by the governance.
+     * @param _withdrawFeePeriod The new withdrawal fee period in seconds.
+     */
+    function setWithdrawFeePeriod(
+        uint256 _withdrawFeePeriod
+    ) external onlyGovernance {
+        withdrawFeePeriod = _withdrawFeePeriod;
+    }
+
 }
