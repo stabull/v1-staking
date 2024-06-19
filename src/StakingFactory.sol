@@ -134,7 +134,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
         external
         zeroAddressCheck(address(poolToken))
         zeroAddressCheck(_pool)
-        onlyAuthorised
+        onlyOwner
     {
         if (poolsAdded[_pool]) revert PoolAlreadyAdded();
         if (tokensAdded[poolToken]) revert TokenAlreadyAdded();
@@ -195,7 +195,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
     /// @param _fundSource The new fund source address.
     function setFundSource(
         address _fundSource
-    ) external onlyAuthorised zeroAddressCheck(_fundSource) {
+    ) external onlyOwner zeroAddressCheck(_fundSource) {
         fundSource = _fundSource;
         emit FundSourceUpdated(_fundSource);
     }
