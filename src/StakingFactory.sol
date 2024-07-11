@@ -64,7 +64,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
     event FundSourceUpdated(address _fundSource);
 
     /// @notice Address of the reward token.
-    address public immutable REWARD_TOKEN;
+    address public reward_token;
 
     /// @notice Address of the source of reward tokens.
     address public fundSource;
@@ -115,7 +115,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
     /// @param _rewardToken The address of the reward token.
     /// @param _fundSource The address from which reward tokens will be pulled for distribution.
     constructor(address _rewardToken, address _fundSource) Ownable() {
-        REWARD_TOKEN = _rewardToken;
+        reward_token = _rewardToken;
         fundSource = _fundSource;
     }
 
@@ -207,8 +207,16 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
         address _token,
         uint256 _amount
     ) external zeroAddressCheck(_token) zeroAmountCheck(_amount) onlyOwner {
-        if (_token == REWARD_TOKEN) revert RewardTokenTransfer();
+        if (_token == reward_token) revert RewardTokenTransfer();
         IERC20(_token).safeTransfer(msg.sender, _amount);
+    }
+
+    /// @notice Allows the owner to change the reward token address
+    /// @param _tokenAddress The address of the reward token.
+    function changeRewardToken(
+        address _tokenAddress
+    ) external zeroAddressCheck(_tokenAddress) onlyOwner {
+        reward_token = _tokenAddress;
     }
 
     /// @notice Allows a user to deposit LP tokens into a specific pool for staking.
@@ -463,7 +471,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
             if (tokenBal < poolTokenAmt) {
                 poolTokenAmt = tokenBal;
             }
-            if (address(pool.token) == address(REWARD_TOKEN)) {
+            if (address(pool.token) == address(reward_token)) {
                 pool.token.safeTransfer(address(msg.sender), sharesRemoved);
             } else {
                 pool.token.safeTransfer(address(msg.sender), poolTokenAmt);
@@ -529,18 +537,18 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
         address _to,
         uint256 _rewardTokenAmt
     ) internal zeroAddressCheck(_to) zeroAmountCheck(_rewardTokenAmt) {
-        uint256 rewardTokenBal = IERC20(REWARD_TOKEN).balanceOf(address(this));
+        uint256 rewardTokenBal = IERC20(reward_token).balanceOf(address(this));
         if (_rewardTokenAmt > rewardTokenBal) {
-            IERC20(REWARD_TOKEN).transfer(_to, rewardTokenBal);
+            IERC20(reward_token).transfer(_to, rewardTokenBal);
         } else {
-            IERC20(REWARD_TOKEN).transfer(_to, _rewardTokenAmt);
+            IERC20(reward_token).transfer(_to, _rewardTokenAmt);
         }
     }
 
     /// @dev Internal function to transfer reward tokens from the `fundSource` to the factory contract.
     /// @param _rewardTokenAmt The amount of reward tokens to transfer.
     function getRewardToken(uint256 _rewardTokenAmt) internal {
-        IERC20(REWARD_TOKEN).transferFrom(
+        IERC20(reward_token).transferFrom(
             fundSource,
             address(this),
             _rewardTokenAmt
