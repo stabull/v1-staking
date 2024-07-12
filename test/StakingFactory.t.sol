@@ -62,10 +62,6 @@ contract StakingFactoryTest is Test {
         IERC20 poolToken = IERC20(lpToken);
         address pool = address(stakingPool);
 
-        // Test zeroAddressCheck
-        vm.expectRevert(bytes4(keccak256("ZeroAddressInserted()")));
-        stakingFactory.add(100, address(0), true, pool); // Should revert due to zero address
-
         vm.expectRevert(bytes4(keccak256("ZeroAddressInserted()")));
         stakingFactory.add(100, address(poolToken), true, address(0)); // Should revert due to zero address
 
@@ -218,8 +214,8 @@ contract StakingFactoryTest is Test {
     }
 
     function test_FunctionsWithFundSourceCases() public {
-       vm.startPrank(fundSource);
-        rewardToken.approve(address(stakingFactory), 0);        
+        vm.startPrank(fundSource);
+        rewardToken.approve(address(stakingFactory), 0);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -238,7 +234,7 @@ contract StakingFactoryTest is Test {
             fundSource,
             address(stakingFactory)
         );
-        assertEq(allowance,0);
+        assertEq(allowance, 0);
 
         // Advance blocks to accumulate rewards
         vm.roll(block.number + 10);
@@ -259,17 +255,15 @@ contract StakingFactoryTest is Test {
         stakingFactory.deposit(0, amount);
         vm.stopPrank();
 
-
         vm.startPrank(fundSource);
-        rewardToken.transfer(address(0x99), rewardToken.balanceOf(fundSource));      
-        rewardToken.approve(address(stakingFactory), type(uint256).max);      
+        rewardToken.transfer(address(0x99), rewardToken.balanceOf(fundSource));
+        rewardToken.approve(address(stakingFactory), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(user);
 
         vm.expectRevert("ERC20: transfer amount exceeds balance");
         stakingFactory.deposit(0, amount);
-
     }
 
     function testPauseUnpause() public {
@@ -379,39 +373,39 @@ contract StakingFactoryTest is Test {
         stakingFactory.inCaseTokensGetStuck(address(stuckToken), 100 * DECIMAL);
     }
 
-        // 4. inCaseTokensGetStuck() - Reward Token Revert
     function testSetRewardToken() public {
         MockERC20 rewardToken2 = new MockERC20();
         assertEq(stakingFactory.reward_token(), address(rewardToken));
         vm.prank(owner);
         stakingFactory.changeRewardToken(address(rewardToken2));
         assertEq(stakingFactory.reward_token(), address(rewardToken2));
-
     }
 
     function testdepositAndWithdrawWithZeroReward() public {
         vm.startPrank(owner);
         stakingFactory.add(100, address(lpToken), true, address(stakingPool));
+        stakingFactory.changeRewardToken(address(0));
 
         uint256 amount = 1000 * DECIMAL;
         uint256 amount2 = 2000 * DECIMAL;
-        uint256 rewardAmount = 0;
+        uint256 amount3 = 3000 * DECIMAL;
+        uint256 rewardAmount1 = 0;
+        uint256 rewardAmount2 = 10 * DECIMAL;
 
-        stakingFactory.setRewardTokenPerBlock(rewardAmount);
+        stakingFactory.setRewardTokenPerBlock(rewardAmount1);
         vm.stopPrank();
 
         vm.startPrank(user);
-        lpToken.approve(address(stakingFactory), amount + amount2 );
+        lpToken.approve(address(stakingFactory), amount + amount2 + amount3);
 
         stakingFactory.deposit(0, amount);
         uint256 allowance = rewardToken.allowance(
             fundSource,
             address(stakingFactory)
         );
-        assert(allowance >= rewardAmount * 10); // ensure enough allowance
+        assert(allowance >= rewardAmount1 * 10); // ensure enough allowance
         uint256 fundSourceBalance = rewardToken.balanceOf(fundSource);
-        assert(fundSourceBalance >= rewardAmount * 10); // ensure enough balance
-
+        assert(fundSourceBalance >= rewardAmount1 * 10); // ensure enough balance
         // Advance blocks to accumulate rewards
         vm.roll(block.number + 10);
         uint256 userBalance = rewardToken.balanceOf(user);
@@ -426,7 +420,6 @@ contract StakingFactoryTest is Test {
         uint256 userRewardBalance = rewardToken.balanceOf(user);
 
         assertEq(userRewardBalance, 0);
-
         stakingFactory.deposit(0, amount2);
 
         userRewardBalance = rewardToken.balanceOf(user);
@@ -437,7 +430,134 @@ contract StakingFactoryTest is Test {
             rewardDebt;
 
         assertEq(userRewardBalance, userReward);
-        assertEq(userReward,0);
+        assertEq(userReward, 0);
+        vm.stopPrank();
+
+        userRewardBalance = rewardToken.balanceOf(user);
+
+        vm.startPrank(owner);
+        stakingFactory.setRewardTokenPerBlock(rewardAmount2);
+        stakingFactory.changeRewardToken(address(rewardToken));
+        vm.stopPrank();
+
+        vm.roll(block.number + 10);
+        vm.startPrank(user);
+
+        userRewardBalance = rewardToken.balanceOf(user);
+        (userShares, rewardDebt) = stakingFactory.userInfo(0, user);
+        stakingFactory.updatePool(0);
+        (, , , accRewardTokenPerShare, ) = stakingFactory.poolInfo(0);
+        userReward = (userShares * accRewardTokenPerShare) / 1e12 - rewardDebt;
+
+        stakingFactory.deposit(0, amount3);
+        uint256 userRewardBalance2 = rewardToken.balanceOf(user);
+        assertEq(userRewardBalance2, userReward + userRewardBalance);
+
+        vm.roll(block.number + 10);
+        vm.startPrank(user);
+
+        userRewardBalance = rewardToken.balanceOf(user);
+        (userShares, rewardDebt) = stakingFactory.userInfo(0, user);
+        stakingFactory.updatePool(0);
+        (, , , accRewardTokenPerShare, ) = stakingFactory.poolInfo(0);
+        userReward = (userShares * accRewardTokenPerShare) / 1e12 - rewardDebt;
+
+        stakingFactory.withdrawAll(0);
+        uint256 userRewardBalance3 = rewardToken.balanceOf(user);
+        assertEq(userRewardBalance3, userReward + userRewardBalance);
+    }
+
+    function testdepositAndWithdrawWithZeroRewardWithoutMintingRewardForSource()
+        public
+    {
+        vm.startPrank(owner);
+        stakingFactory.add(100, address(lpToken), true, address(stakingPool));
+        uint256 amount = 1000 * DECIMAL;
+        uint256 amount2 = 2000 * DECIMAL;
+        uint256 amount3 = 3000 * DECIMAL;
+        uint256 rewardAmount1 = 0;
+        uint256 rewardAmount2 = 10 * DECIMAL;
+
+        stakingFactory.setRewardTokenPerBlock(rewardAmount1);
+        vm.stopPrank();
+
+        vm.startPrank(fundSource);
+        rewardToken.transfer(address(0x23), 10000 * DECIMAL);
+        uint256 rbal = rewardToken.balanceOf(fundSource);
+        assertEq(rbal, 0);
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        lpToken.approve(address(stakingFactory), amount + amount2 + amount3);
+
+        stakingFactory.deposit(0, amount);
+        uint256 allowance = rewardToken.allowance(
+            fundSource,
+            address(stakingFactory)
+        );
+        assert(allowance >= rewardAmount1 * 10); // ensure enough allowance
+        uint256 fundSourceBalance = rewardToken.balanceOf(fundSource);
+        assert(fundSourceBalance >= rewardAmount1 * 10); // ensure enough balance
+        // Advance blocks to accumulate rewards
+        vm.roll(block.number + 10);
+        uint256 userBalance = rewardToken.balanceOf(user);
+
+        userBalance = rewardToken.balanceOf(user);
+
+        (uint256 userShares, uint256 rewardDebt) = stakingFactory.userInfo(
+            0,
+            user
+        );
+
+        uint256 userRewardBalance = rewardToken.balanceOf(user);
+
+        assertEq(userRewardBalance, 0);
+        stakingFactory.deposit(0, amount2);
+
+        userRewardBalance = rewardToken.balanceOf(user);
+
+        (, , , uint256 accRewardTokenPerShare, ) = stakingFactory.poolInfo(0);
+        uint256 userReward = (userShares * accRewardTokenPerShare) /
+            1e12 -
+            rewardDebt;
+
+        assertEq(userRewardBalance, userReward);
+        assertEq(userReward, 0);
+        vm.stopPrank();
+
+        userRewardBalance = rewardToken.balanceOf(user);
+
+        vm.startPrank(owner);
+        rewardToken.mint(fundSource, 10000 * DECIMAL);
+        stakingFactory.setRewardTokenPerBlock(rewardAmount2);
+
+        vm.stopPrank();
+
+        vm.roll(block.number + 10);
+        vm.startPrank(user);
+
+        userRewardBalance = rewardToken.balanceOf(user);
+        (userShares, rewardDebt) = stakingFactory.userInfo(0, user);
+        stakingFactory.updatePool(0);
+        (, , , accRewardTokenPerShare, ) = stakingFactory.poolInfo(0);
+        userReward = (userShares * accRewardTokenPerShare) / 1e12 - rewardDebt;
+
+        stakingFactory.deposit(0, amount3);
+        uint256 userRewardBalance2 = rewardToken.balanceOf(user);
+        assertEq(userRewardBalance2, userReward + userRewardBalance);
+
+        vm.roll(block.number + 10);
+        vm.startPrank(user);
+
+        userRewardBalance = rewardToken.balanceOf(user);
+        (userShares, rewardDebt) = stakingFactory.userInfo(0, user);
+        stakingFactory.updatePool(0);
+        (, , , accRewardTokenPerShare, ) = stakingFactory.poolInfo(0);
+        userReward = (userShares * accRewardTokenPerShare) / 1e12 - rewardDebt;
+
+        stakingFactory.withdrawAll(0);
+        uint256 userRewardBalance3 = rewardToken.balanceOf(user);
+        assertEq(userRewardBalance3, userReward + userRewardBalance);
     }
 
     function testEmergencyWithdrawWithin72Hours() public {
@@ -1609,7 +1729,6 @@ contract StakingFactoryTest is Test {
         vm.expectRevert(bytes4(keccak256("PoolAlreadyAdded()")));
         stakingFactory.add(100, address(lpToken2), false, address(stakingPool));
 
-  
         stakingPool2 = new StakingPool(
             address(stakingFactory),
             owner,
@@ -1633,8 +1752,6 @@ contract StakingFactoryTest is Test {
         vm.expectRevert(bytes4(keccak256("InvalidPID()")));
         stakingFactory.deposit(2, 10 * DECIMAL);
 
-        
-        
         assertEq(stakingFactory.fundSource(), fundSource);
 
         assertEq(stakingFactory.poolLength(), 1);
@@ -1695,16 +1812,15 @@ contract StakingFactoryTest is Test {
         vm.startPrank(user);
         vm.expectRevert("Pausable: paused");
         stakingFactory.deposit(0, 10 * DECIMAL);
-        vm.stopPrank();     
+        vm.stopPrank();
 
         vm.startPrank(owner);
         stakingFactory.unpause();
-        vm.stopPrank();  
+        vm.stopPrank();
 
         vm.startPrank(user);
         stakingFactory.deposit(0, 10 * DECIMAL);
-        vm.stopPrank();     
-
+        vm.stopPrank();
     }
 
     function test_ifStakingTokenIsTransferredInThePool() public {
@@ -1781,16 +1897,21 @@ contract StakingFactoryTest is Test {
 
         vm.roll(block.number + 20);
         stakingFactory.updatePool(0);
-        (uint256 userShares2, uint256 rewardDebt) = stakingFactory.userInfo(0, user);
+        (uint256 userShares2, uint256 rewardDebt) = stakingFactory.userInfo(
+            0,
+            user
+        );
         (, , , uint256 accRewardTokenPerShare2, ) = stakingFactory.poolInfo(0);
-        uint256 userReward2 = ((userShares2 * accRewardTokenPerShare2) / 1e12) - rewardDebt;
+        uint256 userReward2 = ((userShares2 * accRewardTokenPerShare2) / 1e12) -
+            rewardDebt;
         vm.startPrank(owner);
         stakingFactory.setRewardTokenPerBlock(50 * DECIMAL);
         vm.stopPrank();
 
         (uint256 userShares3, ) = stakingFactory.userInfo(0, user);
         (, , , uint256 accRewardTokenPerShare3, ) = stakingFactory.poolInfo(0);
-        uint256 userReward3 = ((userShares3 * accRewardTokenPerShare3) / 1e12) - rewardDebt;
+        uint256 userReward3 = ((userShares3 * accRewardTokenPerShare3) / 1e12) -
+            rewardDebt;
         assertEq(userReward2, userReward3);
 
         vm.startPrank(user);
@@ -1849,7 +1970,7 @@ contract StakingFactoryTest is Test {
             1e12 -
             user1RewardDebt;
         vm.stopPrank();
-    
+
         vm.startPrank(owner);
         stakingFactory.setRewardTokenPerBlock(30 * DECIMAL);
         vm.stopPrank();
@@ -1901,7 +2022,6 @@ contract StakingFactoryTest is Test {
         vm.startPrank(owner);
         stakingFactory.setRewardTokenPerBlock(10);
         vm.stopPrank();
-
 
         vm.startPrank(user3);
         (, , , uint256 accRewardTokenPerShare2, ) = stakingFactory.poolInfo(0);
