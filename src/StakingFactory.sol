@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/security/Pausable.sol";
 import "./Authorizable.sol";
 import "./interfaces/IStakingPool.sol";
 
-
 /// @title StakingFactory
 /// @notice This contract manages multiple StakingPool contracts and distributes rewards to users who stake their LP tokens.
 contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
@@ -62,6 +61,8 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
     event AllocUpdated(uint256 rewardPerBlock);
     /// @notice Emitted when admin update fund source
     event FundSourceUpdated(address _fundSource);
+    /// @notice Emitted when admin update reward token
+    event RewardTokenUpdated(address _rewardToken);
 
     /// @notice Address of the reward token.
     address public reward_token;
@@ -130,12 +131,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
         address poolToken,
         bool _withUpdate,
         address _pool
-    )
-        external
-        zeroAddressCheck(address(poolToken))
-        zeroAddressCheck(_pool)
-        onlyOwner
-    {
+    ) external zeroAddressCheck(poolToken) zeroAddressCheck(_pool) onlyOwner {
         if (poolsAdded[_pool]) revert PoolAlreadyAdded();
         if (tokensAdded[poolToken]) revert TokenAlreadyAdded();
 
@@ -213,10 +209,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
 
     /// @notice Allows the owner to change the reward token address
     /// @param _tokenAddress The address of the reward token.
-    function changeRewardToken(
-        address _tokenAddress
-    ) external zeroAddressCheck(_tokenAddress) onlyOwner {
+    function changeRewardToken(address _tokenAddress) external onlyOwner {
         reward_token = _tokenAddress;
+        emit RewardTokenUpdated(_tokenAddress);
     }
 
     /// @notice Allows a user to deposit LP tokens into a specific pool for staking.
@@ -441,7 +436,6 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
         uint256 sharesTotal = IStakingPool(poolInfo[_pid].pool).sharesTotal();
 
         if (sharesTotal == 0) revert TotalSharesZero();
-
         // Withdraw pending rewardToken
         uint256 pending = (user.shares * (pool.accRewardTokenPerShare)) /
             (1e12) -
@@ -502,8 +496,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
         uint256 rewardTokenReward = (multiplier *
             (rewardTokenPerBlock) *
             (pool.allocPoint)) / (totalAllocPoint);
-
-        getRewardToken(rewardTokenReward);
+        if (rewardTokenReward > 0) {
+            getRewardToken(rewardTokenReward);
+        }
         pool.accRewardTokenPerShare =
             pool.accRewardTokenPerShare +
             ((rewardTokenReward * (1e12)) / (sharesTotal));
