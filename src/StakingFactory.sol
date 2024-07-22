@@ -339,7 +339,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
             amount = poolBalance;
         }
 
-        pool.token.safeTransfer(address(msg.sender), amount);
+        if (amount > 0) {
+            pool.token.safeTransfer(address(msg.sender), amount);
+        }
         user.shares = 0;
         user.rewardDebt = 0;
         emit EmergencyWithdraw(msg.sender, _pid, amount);
@@ -466,7 +468,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
                 poolTokenAmt = tokenBal;
             }
             if (address(pool.token) == address(reward_token)) {
-                pool.token.safeTransfer(address(msg.sender), sharesRemoved);
+                if (sharesRemoved > 0) {
+                    pool.token.safeTransfer(address(msg.sender), sharesRemoved);
+                }
             } else {
                 pool.token.safeTransfer(address(msg.sender), poolTokenAmt);
             }
