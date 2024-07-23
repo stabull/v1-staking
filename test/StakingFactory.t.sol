@@ -560,6 +560,42 @@ contract StakingFactoryTest is Test {
         assertEq(userRewardBalance3, userReward + userRewardBalance);
     }
 
+    function test_zeroAmountEmergencyWithdraw() public {
+        vm.startPrank(owner);
+        stakingFactory.add(100, address(lpToken), true, address(stakingPool));
+        vm.stopPrank();
+        uint256 amount = 100 * DECIMAL;
+        vm.startPrank(user2);
+        lpToken.approve(address(stakingFactory), amount);
+        stakingFactory.deposit(0, amount);
+        vm.stopPrank();
+
+        vm.startPrank(user);
+
+        vm.expectRevert(bytes4(keccak256("ZeroAmountWithdraw()")));
+        stakingFactory.emergencyWithdraw(0);
+
+        vm.stopPrank();
+    }
+
+    function test_zeroAmountWithdraw() public {
+        vm.startPrank(owner);
+        stakingFactory.add(100, address(lpToken), true, address(stakingPool));
+        vm.stopPrank();
+        uint256 amount = 100 * DECIMAL;
+        vm.startPrank(user);
+        lpToken.approve(address(stakingFactory), amount);
+
+        vm.expectRevert(bytes4(keccak256("UserSharesZero()")));
+        stakingFactory.withdraw(0, amount);
+
+        stakingFactory.deposit(0, amount);
+
+        vm.expectRevert(bytes4(keccak256("ZeroAmountInserted()")));
+        stakingFactory.withdraw(0, 0);
+        vm.stopPrank();
+    }
+
     function testEmergencyWithdrawWithin72Hours() public {
         vm.startPrank(owner);
         stakingFactory.add(100, address(lpToken), true, address(stakingPool));
