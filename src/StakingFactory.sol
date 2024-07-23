@@ -472,7 +472,9 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
                     pool.token.safeTransfer(address(msg.sender), sharesRemoved);
                 }
             } else {
+                  if (sharesRemoved > 0) {
                 pool.token.safeTransfer(address(msg.sender), poolTokenAmt);
+                  }
             }
         }
         user.rewardDebt =
