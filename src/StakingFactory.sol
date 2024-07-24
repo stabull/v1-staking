@@ -23,6 +23,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
     error RewardTokenTransfer();
     error TokenAlreadyAdded();
     error PoolAlreadyAdded();
+    error ZeroAmountWithdraw();
 
     /// @dev Struct to store information about each user's stake in a pool.
     struct UserInfo {
@@ -339,6 +340,7 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
             amount = poolBalance;
         }
 
+        if (amount == 0) revert ZeroAmountWithdraw();
         pool.token.safeTransfer(address(msg.sender), amount);
         user.shares = 0;
         user.rewardDebt = 0;
@@ -466,8 +468,10 @@ contract StakingFactory is Authorizable, ReentrancyGuard, Pausable {
                 poolTokenAmt = tokenBal;
             }
             if (address(pool.token) == address(reward_token)) {
+                if (sharesRemoved == 0) revert ZeroAmountWithdraw();
                 pool.token.safeTransfer(address(msg.sender), sharesRemoved);
             } else {
+                if (poolTokenAmt == 0) revert ZeroAmountWithdraw();
                 pool.token.safeTransfer(address(msg.sender), poolTokenAmt);
             }
         }
