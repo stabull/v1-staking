@@ -4,7 +4,7 @@ pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract STB is ERC20 {
+contract STBTest is ERC20 {
 
 
 	constructor() ERC20("STABULL", "STB") {

@@ -1,0 +1,12 @@
+{
+  "name": "stabull-staking",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.8",
+    "hardhat-deploy": "^0.12.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.8.3",
+    "dotenv": "^16.4.5"
+  }
+}
