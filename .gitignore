@@ -2,6 +2,9 @@
 cache/
 out/
 coverage/
+node_modules/
+typechain-types/
+build/
 
 # Ignores development broadcast logs
 !/broadcast
