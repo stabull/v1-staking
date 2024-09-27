@@ -122,7 +122,9 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         );
 
         uint256 feeAmount = (_tokenAmt * entranceFeeFactor) / ONE_IN_BPS;
+        if(feeAmount > 0){ 
         IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
+        }
         uint256 sharesAdded = _tokenAmt - feeAmount;
 
         sharesTotal += sharesAdded;
@@ -170,7 +172,9 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
             block.timestamp
         ) {
             uint256 feeAmount = (_tokenAmt * exitFeeFactor) / ONE_IN_BPS;
+            if(feeAmount > 0){
             IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
+            }
             IERC20(tokenAddress).safeTransfer(
                 stakingFactoryAddress,
                 _tokenAmt - feeAmount
