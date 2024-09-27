@@ -18,6 +18,7 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     error ZeroAmountInserted();
     error FeeLimitExceeded();
     error onlyGovernanceAuthorized();
+    error StakingTokenWithdraw();
 
     /// @notice Address of the token to be staked
     address public immutable tokenAddress;
@@ -41,13 +42,13 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant ONE_IN_BPS = 10000;
 
     /// @notice Entrance fee factor (0.3% entrance fee, set in BPS)
-    uint256 public entranceFeeFactor = 30;
+    uint256 public entranceFeeFactor = 0;
 
     /// @notice Maximum entrance fee factor allowed (0.5%, set in BPS)
     uint256 public constant ENTERANCE_FEE_FACTOR_MAX = 50;
 
     /// @notice Exit fee factor (0.3% exit fee, set in BPS)
-    uint256 public exitFeeFactor = 30;
+    uint256 public exitFeeFactor = 0;
 
     /// @notice Maximum exit fee factor allowed (0.5%, set in BPS)
     uint256 public constant EXIT_FEE_FACTOR_MAX = 50;
@@ -248,6 +249,9 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         zeroAddressCheck(_to)
         zeroAmountCheck(_amount)
     {
+        if(_token == tokenAddress){
+            revert StakingTokenWithdraw();
+        }
         IERC20(_token).safeTransfer(_to, _amount);
     }
 
