@@ -41,20 +41,20 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     /// @notice Basis points (BPS) constant for fee calculations
     uint256 public constant ONE_IN_BPS = 10000;
 
-    /// @notice Entrance fee factor (0.3% entrance fee, set in BPS)
+    /// @notice Entrance fee factor (0% entrance fee, set in BPS)
     uint256 public entranceFeeFactor = 0;
 
     /// @notice Maximum entrance fee factor allowed (0.5%, set in BPS)
     uint256 public constant ENTERANCE_FEE_FACTOR_MAX = 50;
 
-    /// @notice Exit fee factor (0.3% exit fee, set in BPS)
+    /// @notice Exit fee factor (0% exit fee, set in BPS)
     uint256 public exitFeeFactor = 0;
 
     /// @notice Maximum exit fee factor allowed (0.5%, set in BPS)
     uint256 public constant EXIT_FEE_FACTOR_MAX = 50;
 
-    /// @notice Time period that a user must wait after a deposit to not be charged the exit fee (72 hours)
-    uint256 public withdrawFeePeriod = 72 hours;
+    /// @notice Time period that a user must wait after a deposit to not be charged the exit fee
+    uint256 public withdrawFeePeriod = 0;
 
     /// @notice Mapping to store the last deposit time for each user
     mapping(address => uint256) public lastUserDepositTime;
@@ -122,8 +122,8 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         );
 
         uint256 feeAmount = (_tokenAmt * entranceFeeFactor) / ONE_IN_BPS;
-        if(feeAmount > 0){ 
-        IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
+        if (feeAmount > 0) {
+            IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
         }
         uint256 sharesAdded = _tokenAmt - feeAmount;
 
@@ -172,8 +172,8 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
             block.timestamp
         ) {
             uint256 feeAmount = (_tokenAmt * exitFeeFactor) / ONE_IN_BPS;
-            if(feeAmount > 0){
-            IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
+            if (feeAmount > 0) {
+                IERC20(tokenAddress).safeTransfer(feeReceiver, feeAmount);
             }
             IERC20(tokenAddress).safeTransfer(
                 stakingFactoryAddress,
@@ -213,8 +213,7 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     /// @dev Only callable by governance.
     /// @param _exitFeeFactor The new exit fee factor in basis points (BPS).
     function setExitFeeFactor(uint256 _exitFeeFactor) external onlyGovernance {
-         if (_exitFeeFactor > EXIT_FEE_FACTOR_MAX)
-            revert FeeLimitExceeded();
+        if (_exitFeeFactor > EXIT_FEE_FACTOR_MAX) revert FeeLimitExceeded();
         exitFeeFactor = _exitFeeFactor;
     }
 
@@ -236,7 +235,6 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         feeReceiver = _feeReceiver;
     }
 
-
     /// @notice Allows recovery of tokens accidentally sent to the contract (excluding the staking token).
     /// @dev Only callable by governance.
     /// @param _token Address of the stuck token.
@@ -253,7 +251,7 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
         zeroAddressCheck(_to)
         zeroAmountCheck(_amount)
     {
-        if(_token == tokenAddress){
+        if (_token == tokenAddress) {
             revert StakingTokenWithdraw();
         }
         IERC20(_token).safeTransfer(_to, _amount);
@@ -269,5 +267,4 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     ) external onlyGovernance {
         withdrawFeePeriod = _withdrawFeePeriod;
     }
-
 }
