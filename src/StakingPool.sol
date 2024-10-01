@@ -41,16 +41,16 @@ contract StakingPool is Ownable, ReentrancyGuard, Pausable {
     /// @notice Basis points (BPS) constant for fee calculations
     uint256 public constant ONE_IN_BPS = 10000;
 
-    /// @notice Entrance fee factor (0% entrance fee, set in BPS)
+    /// @notice Entrance fee factor
     uint256 public entranceFeeFactor = 0;
 
-    /// @notice Maximum entrance fee factor allowed (0.5%, set in BPS)
+    /// @notice Maximum entrance fee factor allowed
     uint256 public constant ENTERANCE_FEE_FACTOR_MAX = 50;
 
-    /// @notice Exit fee factor (0% exit fee, set in BPS)
+    /// @notice Exit fee factor 
     uint256 public exitFeeFactor = 0;
 
-    /// @notice Maximum exit fee factor allowed (0.5%, set in BPS)
+    /// @notice Maximum exit fee factor allowed 
     uint256 public constant EXIT_FEE_FACTOR_MAX = 50;
 
     /// @notice Time period that a user must wait after a deposit to not be charged the exit fee
